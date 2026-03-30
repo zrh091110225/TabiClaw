@@ -368,8 +368,8 @@ if [[ -z "$JOURNAL_MD" ]]; then
 就这样待了一会儿。"
 fi
 
-echo "$JOURNAL_MD" > "$PROJECT_ROOT/data/journals/${TARGET_DATE}-${NEXT_CITY}.md"
-echo "  已生成: data/journals/${TARGET_DATE}-${NEXT_CITY}.md"
+# 暂存游记内容，等图片生成后再一起写入文件
+JOURNAL_FILE="$PROJECT_ROOT/data/journals/${TARGET_DATE}-${NEXT_CITY}.md"
 
 # 9. 生成图片提示词
 echo "[9/11] 生成图片提示词..."
@@ -539,6 +539,26 @@ else
     fi
   fi
 fi
+
+# 10.5 组装并写入最终的游记文件
+echo "[10.5/11] 写入游记文件..."
+log_info "步骤10.5: 写入游记文件"
+
+FINAL_JOURNAL_CONTENT=""
+
+# 如果图片生成成功，插入到游记最前面
+if [[ -f "$IMAGE_OUTPUT" ]]; then
+  # 使用相对于游记文件的相对路径引用图片
+  IMAGE_REL_PATH="../images/${TARGET_DATE}-${NEXT_CITY}.png"
+  FINAL_JOURNAL_CONTENT="![${NEXT_CITY}的风景](${IMAGE_REL_PATH})
+
+"
+fi
+
+FINAL_JOURNAL_CONTENT+="${JOURNAL_MD}"
+
+echo "$FINAL_JOURNAL_CONTENT" > "$JOURNAL_FILE"
+echo "  已生成游记: $JOURNAL_FILE"
 
 # 11. 更新状态
 echo "[11/11] 更新状态..."
