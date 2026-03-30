@@ -507,7 +507,7 @@ else
       --model "$IMAGE_MODEL" \
       --prompt "$IMAGE_PROMPT_FOR_GEN" \
       --image "$IMAGE_OUTPUT" \
-      --ar 1:1 \
+      --ar 3:4 \
       --imageSize 1K \
       --json 2>&1 | tee "$PROJECT_ROOT/data/output/image_gen_${TARGET_DATE}.log"; then
       echo "  ✅ 图片已生成: $IMAGE_OUTPUT"
