@@ -1,7 +1,7 @@
 {
-  "current_day": 21,
-  "current_city": "房山",
-  "current_wallet": 907,
+  "current_day": 0,
+  "current_city": "未知",
+  "current_wallet": 10000,
   "last_updated": "2026-03-30",
-  "status": "traveling"
+  "status": "ready"
 }
