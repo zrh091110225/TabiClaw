@@ -52,5 +52,6 @@
 # AI 绘画工具
 - Provider: google
 - Model: gemini-3.1-flash-image-preview
+- 建议尺寸: 720x720
 - 比例: 1:1 正方形
 
