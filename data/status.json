@@ -1,7 +1,7 @@
 {
-  "current_day": 1,
-  "current_city": "深圳",
+  "current_day": 2,
+  "current_city": "惠州",
   "current_wallet": 1000,
   "last_updated": "2026-03-30",
-  "status": "ready"
+  "status": "traveling"
 }
