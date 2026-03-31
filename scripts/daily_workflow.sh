@@ -617,12 +617,17 @@ update_journal_index_status "$PROJECT_ROOT" "$NEW_DAY" "$NEXT_CITY" "$NEW_WALLET
 if [[ -f "$INDEX_FILE" ]]; then
   # 检查是否已有该游记记录（避免重复追加）
   if ! grep -q "\](./${TARGET_DATE}-${NEXT_CITY}.md)" "$INDEX_FILE" 2>/dev/null; then
-    # 在分隔线后面插入新行
+    # 在分隔线后面插入新行，注意我们要找游记列表的分隔线，即下面有日期的那一层
     CURRENT_TIME=$(date "+%Y-%m-%d %H:%M:%S")
     awk -v date="$TARGET_DATE" -v city="$NEXT_CITY" -v price="${PRICE}元" -v wallet="${NEW_WALLET}元" -v file="${TARGET_DATE}-${NEXT_CITY}.md" -v add_time="$CURRENT_TIME" '
+      BEGIN { found_list = 0 }
+      /^## 游记列表/ { found_list = 1; print; next }
       /^\| -/ {
         print
-        print "| " date " | " city " | " price " | " wallet " | [查看](./" file ") | " add_time " |"
+        if (found_list == 1) {
+          print "| " date " | " city " | " price " | " wallet " | [查看](./" file ") | " add_time " |"
+          found_list = 0 # 只插入一次
+        }
         next
       }
       /\| <br \/>/ { next }

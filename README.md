@@ -28,12 +28,33 @@
 - 当前状态：[`data/status.json`](./data/status.json) 和 [`data/journals/index.md`](./data/journals/index.md)
 - 当前路线：[`data/route.md`](./data/route.md)
 - 游记索引：[`data/journals/index.md`](./data/journals/index.md)
-- 最新游记：[`data/journals/2026-03-31-滨海新.md`](./data/journals/2026-03-31-滨海新.md)
 - 图片目录：[`data/images/`](./data/images/)
-- 最新图片：[`data/images/2026-03-31-滨海新.png`](./data/images/2026-03-31-滨海新.png)
+
+**示例：**
+<div style="display: flex; flex-wrap: wrap; gap: 10px;">
+  <img src="./data/demo/北京.jpg" width="30%" />
+  <img src="./data/demo/成都.jpg" width="30%" />
+  <img src="./data/demo/重庆.jpg" width="30%" />
+  <img src="./data/demo/大理.jpg" width="30%" />
+  <img src="./data/demo/敦煌.jpg" width="30%" />
+  <img src="./data/demo/广州.jpg" width="30%" />
+  <img src="./data/demo/桂林.jpg" width="30%" />
+  <img src="./data/demo/哈尔滨.jpg" width="30%" />
+  <img src="./data/demo/湖南.jpg" width="30%" />
+  <img src="./data/demo/昆明.jpg" width="30%" />
+  <img src="./data/demo/拉萨.jpg" width="30%" />
+  <img src="./data/demo/满洲里.jpg" width="30%" />
+  <img src="./data/demo/南京.jpg" width="30%" />
+  <img src="./data/demo/三亚.jpg" width="30%" />
+  <img src="./data/demo/厦门.jpg" width="30%" />
+  <img src="./data/demo/上海.jpg" width="30%" />
+  <img src="./data/demo/深圳.jpg" width="30%" />
+  <img src="./data/demo/苏州.jpg" width="30%" />
+</div>
+
+
 
 如果你想直接确认阿虾现在走到哪里，从 [`data/journals/index.md`](./data/journals/index.md) 开始看；如果你想补看它一路写下来的东西，也从这里往下翻。
-
 ## 为什么这是一个开源 + AI 的新玩法
 
 - 它不是一次性生成内容，而是一个可持续运行的旅行工作流
