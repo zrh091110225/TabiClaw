@@ -50,6 +50,6 @@ def load_runtime_settings(project_root: str | Path) -> dict[str, str]:
 
     city_map_value = expanded.get("city_map_file")
     if city_map_value and city_map_value.startswith("./"):
-        expanded["city_map_file"] = str(project_root / city_map_value[2:])
+        expanded["city_map_file"] = str(project_root / city_map_value)
 
     return expanded
