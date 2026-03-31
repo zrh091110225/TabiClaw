@@ -6,4 +6,4 @@ awk -v date="2026-03-31" -v city="上海" -v price="100元" -v wallet="900元" -
   }
   /\| <br \/>/ { next }
   { print }
-' /Users/hymanhai/RoamShrimp/data/journals/index.md
+' /Users/hymanhai/TabiClaw/data/journals/index.md

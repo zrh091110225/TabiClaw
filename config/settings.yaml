@@ -10,4 +10,24 @@ current_day=1
 start_city=杭州
 
 # 关联的本地 GitHub 仓库路径
-github_repo=/Users/hymanhai/RoamShrimp
+github_repo=/Users/hymanhai/TabiClaw
+# GitHub 项目名称 (用于查询 Star 数)
+github_repo_name=zrh091110225/TabiClaw
+
+# 每个新增 Star 奖励的金额 N
+star_reward_n=10
+
+# 外部工具路径
+tools_path="${HOME}/.openclaw/workspace/tools"
+city_map_file="${tools_path}/city_map.json"
+image_gen_script="${HOME}/.openclaw/workspace/skills/baoyu-skills/skills/baoyu-image-gen/scripts/main.ts"
+
+# 默认模型配置
+llm_provider_default=minimax
+llm_base_url_default="https://api.minimax.chat/v1"
+writer_model_default=MiniMax-Text-01
+image_provider_default=google
+image_model_default=gemini-3.1-flash-image-preview
+
+# Git 行为
+git_auto_push=true

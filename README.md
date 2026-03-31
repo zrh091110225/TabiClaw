@@ -1,4 +1,4 @@
-# RoamShrimp / 旅行的阿虾
+# TabiClaw / 旅行的阿虾
 
 模拟旅行青蛙的自动内容生成系统。
 
@@ -69,13 +69,13 @@ bash scripts/continue_route.sh 广州
 ```bash
 crontab -e
 # 每天早上 8 点运行
-0 8 * * * cd /Users/hymanhai/RoamShrimp && bash scripts/daily_workflow.sh
+0 8 * * * cd /Users/hymanhai/TabiClaw && bash scripts/daily_workflow.sh
 ```
 
 ### 项目结构
 
 ```
-RoamShrimp/
+TabiClaw/
 ├── README.md              # 本文件
 ├── config/                # 配置文件
 │   ├── persona.md         # 人设
@@ -95,7 +95,7 @@ RoamShrimp/
 │   ├── replan_route.sh    # 重新规划路径
 │   └── continue_route.sh  # 续写后续路径
 └── skills/                # Skill 定义
-    └── roam-shrimp/
+    └── tabi-claw/
 ```
 
 ### 工具脚本

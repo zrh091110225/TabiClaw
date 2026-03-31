@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 清理 RoamShrimp 数据脚本
+# 清理 TabiClaw 数据脚本
 
 set -euo pipefail
 
@@ -8,7 +8,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DATA_DIR="$PROJECT_ROOT/data"
 
 echo "=========================================="
-echo "清理 RoamShrimp 数据"
+echo "清理 TabiClaw 数据"
 echo "=========================================="
 
 # 1. 删除 images 和 journals 目录下的文件

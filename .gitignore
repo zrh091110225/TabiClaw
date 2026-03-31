@@ -11,6 +11,3 @@ data/logs/
 
 # 图片压缩缓存
 .tinypng_cache/
-
-# 本地测试脚本
-scripts/generate_images.sh

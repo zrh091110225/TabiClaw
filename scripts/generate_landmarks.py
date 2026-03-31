@@ -13,6 +13,8 @@ import urllib.error
 import re
 from pathlib import Path
 
+from lib.settings import load_runtime_settings
+
 def load_env():
     """从项目根目录的 .env 文件加载环境变量"""
     env_path = Path(__file__).resolve().parent.parent / '.env'
@@ -38,9 +40,10 @@ def main():
     
     # 1. Load configuration
     load_env()
-    provider = os.environ.get('LLM_PROVIDER', 'minimax')
-    base_url = os.environ.get('LLM_BASE_URL', 'https://api.minimax.chat/v1')
-    model = os.environ.get('WRITER_MODEL', 'MiniMax-Text-01')
+    settings = load_runtime_settings(Path(__file__).resolve().parent.parent)
+    provider = os.environ.get('LLM_PROVIDER', settings['llm_provider_default'])
+    base_url = os.environ.get('LLM_BASE_URL', settings['llm_base_url_default'])
+    model = os.environ.get('WRITER_MODEL', settings['writer_model_default'])
     api_key = os.environ.get('LLM_API_KEY')
     
     if not api_key:

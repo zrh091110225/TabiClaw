@@ -1,15 +1,15 @@
 ---
-name: "roam-shrimp"
-description: "旅行的阿虾：模拟旅行青蛙，每天自动生成游记内容。包含初始化配置、单次执行Workflow、工具脚本调用。当用户提到旅行的阿虾、RoamShrimp、阿虾游记、自动生成游记时使用。"
+name: "tabi-claw"
+description: "旅行的阿虾：模拟旅行青蛙，每天自动生成游记内容。包含初始化配置、单次执行Workflow、工具脚本调用。当用户提到旅行的阿虾、TabiClaw、阿虾游记、自动生成游记时使用。"
 ---
 
-# RoamShrimp / 旅行的阿虾
+# TabiClaw / 旅行的阿虾
 
 模拟旅行青蛙的自动内容生成系统：设定初始金额和城市路径，每天自动生成一篇游记并发布到 GitHub。
 
 ## When to use this skill
 
-- 用户提到"旅行的阿虾"、"RoamShrimp"、"阿虾"、"生成游记"、"开始今天的旅行"
+- 用户提到"旅行的阿虾"、"TabiClaw"、"阿虾"、"生成游记"、"开始今天的旅行"
 - 需要初始化项目配置时
 - 需要执行单次旅行 Workflow 时
 - 需要检查余额或旅行状态时
@@ -17,7 +17,7 @@ description: "旅行的阿虾：模拟旅行青蛙，每天自动生成游记内
 ## 项目结构
 
 ```
-RoamShrimp/
+TabiClaw/
 ├── config/                    # 配置文件目录
 │   ├── persona.md           # 人设配置
 │   ├── style.md             # 文风配置
@@ -143,7 +143,7 @@ IMAGE_PROVIDER=dashscope
 IMAGE_MODEL=qwen-image-2.0-pro
 
 # 路径
-ROAMSHRIMP_ROOT=/Users/hymanhai/RoamShrimp
+TABICLAW_ROOT=/Users/hymanhai/TabiClaw
 TOOLS_PATH=/Users/hymanhai/.openclaw/workspace/tools
 ```
 

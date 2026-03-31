@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
-# RoamShrimp 初始化检查脚本
+# TabiClaw 初始化检查脚本
 # 检查所有配置文件是否完整
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# shellcheck source=/dev/null
+source "$PROJECT_ROOT/scripts/lib/config.sh"
+load_runtime_config "$PROJECT_ROOT"
 
 echo "=========================================="
-echo "RoamShrimp 初始化检查"
+echo "TabiClaw 初始化检查"
 echo "=========================================="
 
 CONFIG_DIR="$PROJECT_ROOT/config"
@@ -45,13 +48,11 @@ check_file "$DATA_DIR/route.md" "城市路径 (route.md)" || MISSING=1
 echo ""
 echo "检查工具脚本..."
 
-TOOLS_PATH="/Users/hymanhai/.openclaw/workspace/tools"
-
-check_file "$TOOLS_PATH/route.py" "路线查询工具 (route.py)" || MISSING=1
-check_file "$TOOLS_PATH/attractions.py" "景点查询工具 (attractions.py)" || MISSING=1
-check_file "$TOOLS_PATH/photo_spots.py" "打卡点查询工具 (photo_spots.py)" || MISSING=1
-check_file "$TOOLS_PATH/weather.py" "天气查询工具 (weather.py)" || MISSING=1
-check_file "$TOOLS_PATH/city_map.json" "城市映射 (city_map.json)" || MISSING=1
+check_file "$tools_path/route.py" "路线查询工具 (route.py)" || MISSING=1
+check_file "$tools_path/attractions.py" "景点查询工具 (attractions.py)" || MISSING=1
+check_file "$tools_path/photo_spots.py" "打卡点查询工具 (photo_spots.py)" || MISSING=1
+check_file "$tools_path/weather.py" "天气查询工具 (weather.py)" || MISSING=1
+check_file "$city_map_file" "城市映射 (city_map.json)" || MISSING=1
 
 echo ""
 if [[ $MISSING -eq 1 ]]; then

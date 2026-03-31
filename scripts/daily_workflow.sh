@@ -1,4 +1,4 @@
-# RoamShrimp Daily Workflow - 旅行的阿虾每日执行脚本 (JSON 工具版 + MiniMax LLM + 图片生成)
+# TabiClaw Daily Workflow - 旅行的阿虾每日执行脚本 (JSON 工具版 + MiniMax LLM + 图片生成)
 # 用法: bash scripts/daily_workflow.sh [日期 YYYY-MM-DD]
 
 # 改为 trap 捕获错误，不要一失败就退出
@@ -37,9 +37,12 @@ if [[ -z "$CLAWGO_ROOT" ]]; then
 fi
 
 PROJECT_ROOT="$CLAWGO_ROOT"
-TOOLS_PATH="$HOME/.openclaw/workspace/tools"
-CITY_MAP="$TOOLS_PATH/city_map.json"
-BAOYU_IMAGE_GEN="$HOME/.openclaw/workspace/skills/baoyu-skills/skills/baoyu-image-gen/scripts/main.ts"
+# shellcheck source=/dev/null
+source "$PROJECT_ROOT/scripts/lib/config.sh"
+load_runtime_config "$PROJECT_ROOT"
+TOOLS_PATH="$tools_path"
+CITY_MAP="$city_map_file"
+BAOYU_IMAGE_GEN="$image_gen_script"
 
 # 解析命令行参数
 ENV_FILE=""
@@ -70,10 +73,19 @@ mkdir -p "$PROJECT_ROOT/data/images"
 
 # 初始化当日日志
 echo "==========================================" > "$PROJECT_ROOT/data/logs/workflow_${TARGET_DATE}.log"
-echo "RoamShrimp Daily Workflow: $TARGET_DATE" >> "$PROJECT_ROOT/data/logs/workflow_${TARGET_DATE}.log"
+echo "TabiClaw Daily Workflow: $TARGET_DATE" >> "$PROJECT_ROOT/data/logs/workflow_${TARGET_DATE}.log"
 echo "==========================================" >> "$PROJECT_ROOT/data/logs/workflow_${TARGET_DATE}.log"
 
 log_info "开始执行每日工作流"
+
+# ============ 检查 GitHub Star 并增加资金 ============
+log_info "检查 GitHub 项目 Star 数量..."
+python3 "$PROJECT_ROOT/scripts/check_stars.py" >> "$PROJECT_ROOT/data/logs/workflow_${TARGET_DATE}.log" 2>&1
+if [[ $? -eq 0 ]]; then
+  log_info "GitHub Star 检查完成"
+else
+  error_warn "GitHub Star 检查失败"
+fi
 
 # ============ 依赖检查 ============
 check_dependency() {
@@ -118,16 +130,16 @@ fi
 : "${LLM_API_KEY:?未配置 LLM_API_KEY，请在 .env 中设置}"
 
 # LLM 配置（默认值）
-LLM_PROVIDER="${LLM_PROVIDER:-minimax}"
-LLM_BASE_URL="${LLM_BASE_URL:-https://api.minimax.chat/v1}"
-WRITER_MODEL="${WRITER_MODEL:-MiniMax-Text-01}"
+LLM_PROVIDER="${LLM_PROVIDER:-$llm_provider_default}"
+LLM_BASE_URL="${LLM_BASE_URL:-$llm_base_url_default}"
+WRITER_MODEL="${WRITER_MODEL:-$writer_model_default}"
 
 # 图片生成配置（支持通过环境变量动态配置）
-IMAGE_PROVIDER="${IMAGE_PROVIDER:-google}"
-IMAGE_MODEL="${IMAGE_MODEL:-gemini-3.1-flash-image-preview}"
+IMAGE_PROVIDER="${IMAGE_PROVIDER:-$image_provider_default}"
+IMAGE_MODEL="${IMAGE_MODEL:-$image_model_default}"
 
 echo "=========================================="
-echo "RoamShrimp Daily Workflow: $TARGET_DATE"
+echo "TabiClaw Daily Workflow: $TARGET_DATE"
 echo "=========================================="
 
 # 1. 读取状态
@@ -589,13 +601,21 @@ fi
 # 更新 status.json
 echo "  更新 status.json..."
 log_info "更新 status.json..."
+
+LAST_STAR_COUNT=$(jq -r '.last_star_count // empty' "$STATUS_FILE" 2>/dev/null)
+STAR_FIELD=""
+if [[ -n "$LAST_STAR_COUNT" && "$LAST_STAR_COUNT" != "null" ]]; then
+  STAR_FIELD=",
+  \"last_star_count\": $LAST_STAR_COUNT"
+fi
+
 cat > "$STATUS_FILE" << EOF
 {
   "current_day": $NEW_DAY,
   "current_city": "$NEXT_CITY",
   "current_wallet": $NEW_WALLET,
   "last_updated": "$TARGET_DATE",
-  "status": "traveling"
+  "status": "traveling"${STAR_FIELD}
 }
 EOF
 

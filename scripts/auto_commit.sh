@@ -6,6 +6,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# shellcheck source=/dev/null
+source "$PROJECT_ROOT/scripts/lib/config.sh"
+load_runtime_config "$PROJECT_ROOT"
 
 # 日志输出函数
 log_info() {
@@ -40,11 +43,14 @@ else
   exit 1
 fi
 
-# 推送到远程
-log_info "开始推送到远程仓库..."
-if git push; then
-  log_info "✅ 已成功推送到远程仓库"
+if [[ "$git_auto_push" == "true" ]]; then
+  log_info "开始推送到远程仓库..."
+  if git push; then
+    log_info "✅ 已成功推送到远程仓库"
+  else
+    error_warn "❌ Git 推送失败"
+    exit 1
+  fi
 else
-  error_warn "❌ Git 推送失败"
-  exit 1
+  log_info "已通过 config/settings.yaml 关闭自动推送，跳过 git push"
 fi

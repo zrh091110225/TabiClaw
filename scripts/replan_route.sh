@@ -6,7 +6,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-TOOLS_PATH="/Users/hymanhai/.openclaw/workspace/tools"
+# shellcheck source=/dev/null
+source "$PROJECT_ROOT/scripts/lib/config.sh"
+load_runtime_config "$PROJECT_ROOT"
 ROUTE_FILE="$PROJECT_ROOT/data/route.md"
 
 # 解析参数
@@ -25,7 +27,7 @@ echo "重新规划路径: $START_CITY → $END_CITY"
 echo "=========================================="
 
 # 调用 route_planner.py 获取 JSON 输出
-ROUTE_JSON=$(python3 "$TOOLS_PATH/route_planner.py" "$START_CITY" "$END_CITY")
+ROUTE_JSON=$(python3 "$tools_path/route_planner.py" "$START_CITY" "$END_CITY")
 
 # 检查是否成功
 SUCCESS=$(echo "$ROUTE_JSON" | jq -r '.success // false')
