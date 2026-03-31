@@ -6,6 +6,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DATA_DIR="$PROJECT_ROOT/data"
+# shellcheck source=/dev/null
+source "$PROJECT_ROOT/scripts/lib/config.sh"
+load_runtime_config "$PROJECT_ROOT"
 
 echo "=========================================="
 echo "清理 TabiClaw 数据"
@@ -18,21 +21,8 @@ rm -rf "$DATA_DIR/images"/*
 echo "正在清理 journals 目录..."
 rm -rf "$DATA_DIR/journals"/*
 
-# 重新创建 index.md，保持表头
-cat > "$DATA_DIR/journals/index.md" << EOF
-# 每日游记索引
-
-阿虾的10000元环游中国旅行记录。
-
-## 游记列表
-
-| 日期 | 城市 | 交通费 | 余额 | 链接 |
-|------|------|--------|------|------|
-
----
-
-_最后更新: $(date +%Y-%m-%d)_
-EOF
+# 重新创建 index.md，保持状态区和表头
+ensure_journal_index "$PROJECT_ROOT" "0" "未知" "10000" "⚪ 未开始" "$(date +%Y-%m-%d)"
 echo "✅ images 和 journals 目录下的文件已删除，并重建了 journals/index.md"
 
 # 2. 清空 route.md
@@ -40,15 +30,10 @@ echo "正在清空 route.md..."
 > "$DATA_DIR/route.md"
 echo "✅ route.md 已清空"
 
-# 3. 重置 README.md 状态部分
-echo "正在重置 README.md 状态部分..."
-if [[ -f "$PROJECT_ROOT/README.md" ]]; then
-  sed -i '' -E "s/\| Day[[:space:]]+\|.*\|/| Day      | 0       |/" "$PROJECT_ROOT/README.md" 2>/dev/null || true
-  sed -i '' -E "s/\| 当前城市[[:space:]]+\|.*\|/| 当前城市 | 未知       |/" "$PROJECT_ROOT/README.md" 2>/dev/null || true
-  sed -i '' -E "s/\| 余额[[:space:]]+\|.*\|/| 余额     | 10000 元 |/" "$PROJECT_ROOT/README.md" 2>/dev/null || true
-  sed -i '' -E "s/\| 状态[[:space:]]+\|.*\|/| 状态     | ⚪ 未开始   |/" "$PROJECT_ROOT/README.md" 2>/dev/null || true
-  echo "✅ README.md 状态部分已重置"
-fi
+# 3. 重置 index.md 状态部分
+echo "正在重置 index.md 状态部分..."
+update_journal_index_status "$PROJECT_ROOT" "0" "未知" "10000" "⚪ 未开始" "$(date +%Y-%m-%d)"
+echo "✅ index.md 状态部分已重置"
 
 # 4. 重置 status.json
 echo "正在重置 status.json..."

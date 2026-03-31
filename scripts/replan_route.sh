@@ -104,14 +104,8 @@ if [[ "$RESET_STATUS" == "true" ]]; then
 EOF
   echo "✅ 状态已重置（Day=1, 余额=1000元）"
 
-  # 更新 README.md 中的项目状态
-  if [[ -f "$PROJECT_ROOT/README.md" ]]; then
-    sed -i '' -E "s/\| Day[[:space:]]+\|.*\|/| Day      | 1       |/" "$PROJECT_ROOT/README.md" 2>/dev/null || true
-    sed -i '' -E "s/\| 当前城市[[:space:]]+\|.*\|/| 当前城市 | $START_CITY       |/" "$PROJECT_ROOT/README.md" 2>/dev/null || true
-    sed -i '' -E "s/\| 余额[[:space:]]+\|.*\|/| 余额     | 1000 元  |/" "$PROJECT_ROOT/README.md" 2>/dev/null || true
-    sed -i '' -E "s/\| 状态[[:space:]]+\|.*\|/| 状态     | ⚪ 未开始   |/" "$PROJECT_ROOT/README.md" 2>/dev/null || true
-    echo "✅ README.md 状态已更新"
-  fi
+  update_journal_index_status "$PROJECT_ROOT" "1" "$START_CITY" "1000" "⚪ 未开始" "$(date +%Y-%m-%d)"
+  echo "✅ index.md 状态已更新"
 fi
 
 # 自动提交到 Git

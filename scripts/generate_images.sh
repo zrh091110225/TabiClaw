@@ -100,22 +100,8 @@ for NEXT_CITY in "$@"; do
   WEATHER_DESC="晴"
   WEATHER_DESC_VAL="${WEATHER_DESC:-afternoon}"
   
-  export IMAGE_STYLE_CONTENT NEXT_CITY ATTRACTION_1 ATTRACTION_1_DESC WEATHER_DESC_VAL
-  IMAGE_PROMPT_PROMPT=$(python3 -c "
-import os, sys
-text = sys.stdin.read()
-keys = {
-    'IMAGE_STYLE_CONTENT': os.environ.get('IMAGE_STYLE_CONTENT', ''),
-    'NEXT_CITY': os.environ.get('NEXT_CITY', ''),
-    'CITY': os.environ.get('NEXT_CITY', ''),
-    'ATTRACTION_1': os.environ.get('ATTRACTION_1', ''),
-    'ATTRACTION_1_DESC': os.environ.get('ATTRACTION_1_DESC', ''),
-    'WEATHER_DESC': os.environ.get('WEATHER_DESC_VAL', '')
-}
-for k, v in keys.items():
-    text = text.replace('{{' + k + '}}', v)
-print(text)
-" < "$IMAGE_PROMPT_TEMPLATE_FILE")
+  export IMAGE_STYLE_CONTENT NEXT_CITY ATTRACTION_1 ATTRACTION_1_DESC WEATHER_DESC_VAL WEATHER_DESC="$WEATHER_DESC_VAL" CITY="$NEXT_CITY"
+  IMAGE_PROMPT_PROMPT=$(python3 "$PROJECT_ROOT/scripts/lib/template_renderer.py" < "$IMAGE_PROMPT_TEMPLATE_FILE")
 
   # 调试：打印替换后的 PROMPT
   # echo "    [DEBUG] IMAGE_PROMPT_PROMPT:"

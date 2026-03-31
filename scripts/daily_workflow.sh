@@ -294,14 +294,7 @@ if [[ ! -f "$PROMPT_TEMPLATE_FILE" ]]; then
 fi
 
 export PERSONA STYLE CURRENT_DAY TARGET_DATE WEATHER_DESC TEMP_C CURRENT_CITY NEXT_CITY PRICE ATTRACTION_1 ATTRACTION_2 ATTRACTION_3
-CONTENT_PROMPT=$(python3 -c "
-import os, sys
-text = sys.stdin.read()
-keys = ['PERSONA', 'STYLE', 'CURRENT_DAY', 'TARGET_DATE', 'WEATHER_DESC', 'TEMP_C', 'CURRENT_CITY', 'NEXT_CITY', 'PRICE', 'ATTRACTION_1', 'ATTRACTION_2', 'ATTRACTION_3']
-for k in keys:
-    text = text.replace('{{' + k + '}}', os.environ.get(k, ''))
-print(text)
-" < "$PROMPT_TEMPLATE_FILE")
+CONTENT_PROMPT=$(python3 "$PROJECT_ROOT/scripts/lib/template_renderer.py" < "$PROMPT_TEMPLATE_FILE")
 
 echo "$CONTENT_PROMPT" > "$PROJECT_ROOT/data/output/content_prompt_${TARGET_DATE}.txt"
 log_info "游记生成 Prompt:
@@ -402,22 +395,11 @@ fi
 
 # 处理变量默认值
 WEATHER_DESC_VAL="${WEATHER_DESC:-afternoon}"
+# 导出供模板引擎使用
+export WEATHER_DESC="$WEATHER_DESC_VAL"
 
 export IMAGE_STYLE_CONTENT NEXT_CITY ATTRACTION_1 ATTRACTION_1_DESC WEATHER_DESC_VAL
-IMAGE_PROMPT_PROMPT=$(python3 -c "
-import os, sys
-text = sys.stdin.read()
-keys = {
-    'IMAGE_STYLE_CONTENT': os.environ.get('IMAGE_STYLE_CONTENT', ''),
-    'NEXT_CITY': os.environ.get('NEXT_CITY', ''),
-    'ATTRACTION_1': os.environ.get('ATTRACTION_1', ''),
-    'ATTRACTION_1_DESC': os.environ.get('ATTRACTION_1_DESC', ''),
-    'WEATHER_DESC': os.environ.get('WEATHER_DESC_VAL', '')
-}
-for k, v in keys.items():
-    text = text.replace('{{' + k + '}}', v)
-print(text)
-" < "$IMAGE_PROMPT_TEMPLATE_FILE")
+IMAGE_PROMPT_PROMPT=$(python3 "$PROJECT_ROOT/scripts/lib/template_renderer.py" < "$IMAGE_PROMPT_TEMPLATE_FILE")
 
 echo "$IMAGE_PROMPT_PROMPT" > "$PROJECT_ROOT/data/output/image_prompt_request_${TARGET_DATE}.txt"
 log_info "图片提示词生成 Prompt:
@@ -619,19 +601,12 @@ cat > "$STATUS_FILE" << EOF
 }
 EOF
 
-# 更新 README 项目状态部分
-if [[ -f "$PROJECT_ROOT/README.md" ]]; then
-  log_info "更新 README.md..."
-  sed -i '' -E "s/\| Day[[:space:]]+\|.*\|/| Day      | $NEW_DAY       |/" "$PROJECT_ROOT/README.md" 2>/dev/null || true
-  sed -i '' -E "s/\| 当前城市[[:space:]]+\|.*\|/| 当前城市 | $NEXT_CITY       |/" "$PROJECT_ROOT/README.md" 2>/dev/null || true
-  sed -i '' -E "s/\| 余额[[:space:]]+\|.*\|/| 余额     | $NEW_WALLET 元  |/" "$PROJECT_ROOT/README.md" 2>/dev/null || true
-  sed -i '' -E "s/\| 状态[[:space:]]+\|.*\|/| 状态     | 🟢 旅行中   |/" "$PROJECT_ROOT/README.md" 2>/dev/null || true
-fi
-
-# 12. 追加游记索引（index.md）
+# 12. 更新游记索引（index.md）
 echo "  更新游记索引 index.md..."
 log_info "更新游记索引..."
 INDEX_FILE="$PROJECT_ROOT/data/journals/index.md"
+
+update_journal_index_status "$PROJECT_ROOT" "$NEW_DAY" "$NEXT_CITY" "$NEW_WALLET" "🟢 旅行中" "$TARGET_DATE"
 
 if [[ -f "$INDEX_FILE" ]]; then
   # 检查是否已有该游记记录（避免重复追加）
@@ -647,9 +622,6 @@ if [[ -f "$INDEX_FILE" ]]; then
       /\| <br \/>/ { next }
       { print }
     ' "$INDEX_FILE" > "${INDEX_FILE}.tmp" 2>/dev/null && mv "${INDEX_FILE}.tmp" "$INDEX_FILE"
-    
-    # 更新最后更新时间
-    sed -i '' "s/_最后更新: [0-9-]*/_最后更新: $TARGET_DATE/" "$INDEX_FILE" 2>/dev/null || true
     log_info "游记索引已更新"
   else
     log_info "游记索引已存在该日期记录，跳过"

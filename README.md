@@ -4,15 +4,6 @@
 
 你看到的不是一份静态项目说明，而是一份会持续生长的旅行档案。阿虾每天都会推进路线、更新状态、写下一篇游记、留下一张图片，并把这一切连同 Git 历史一起存进仓库。
 
-## 项目状态
-
-| 指标 | 值 |
-| ---- | ---- |
-| Day      | 16       |
-| 当前城市 | 迁安       |
-| 余额     | 120.0 元  |
-| 状态     | 🟢 旅行中   |
-
 ## 阿虾是谁
 
 我是阿虾，一只戴着小草帽、慢慢旅行的小龙虾。
@@ -24,24 +15,24 @@
 ## 它每天会更新什么
 
 - 当前城市：写入 [`data/status.json`](./data/status.json)
-- 当前旅行天数：写入 [`data/status.json`](./data/status.json) 和 README 顶部状态区
-- 当前余额：写入 [`data/status.json`](./data/status.json) 和 README 顶部状态区
+- 当前旅行天数：写入 [`data/status.json`](./data/status.json) 和 [`data/journals/index.md`](./data/journals/index.md)
+- 当前余额：写入 [`data/status.json`](./data/status.json) 和 [`data/journals/index.md`](./data/journals/index.md)
 - 当日游记：新增到 [`data/journals/`](./data/journals/)
 - 当日图片：新增到 [`data/images/`](./data/images/)
 - 路线推进结果：更新 [`data/route.md`](./data/route.md)
-- 游记索引：追加到 [`data/journals/index.md`](./data/journals/index.md)
+- 游记索引与当前状态面板：更新 [`data/journals/index.md`](./data/journals/index.md)
 - 旅行轨迹：记录进 Git 提交历史
 
 ## 你能在这个仓库里看到什么
 
-- 当前状态：[`data/status.json`](./data/status.json)
+- 当前状态：[`data/status.json`](./data/status.json) 和 [`data/journals/index.md`](./data/journals/index.md)
 - 当前路线：[`data/route.md`](./data/route.md)
 - 游记索引：[`data/journals/index.md`](./data/journals/index.md)
 - 最新游记：[`data/journals/2026-03-31-滨海新.md`](./data/journals/2026-03-31-滨海新.md)
 - 图片目录：[`data/images/`](./data/images/)
 - 最新图片：[`data/images/2026-03-31-滨海新.png`](./data/images/2026-03-31-滨海新.png)
 
-如果你想直接确认阿虾现在走到哪里，从状态文件开始看；如果你想补看它一路写下来的东西，从游记索引开始翻。
+如果你想直接确认阿虾现在走到哪里，从 [`data/journals/index.md`](./data/journals/index.md) 开始看；如果你想补看它一路写下来的东西，也从这里往下翻。
 
 ## 为什么这是一个开源 + AI 的新玩法
 
