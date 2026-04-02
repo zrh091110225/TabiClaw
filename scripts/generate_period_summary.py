@@ -67,6 +67,11 @@ def read_text(path: Path, default: str = "") -> str:
     return path.read_text(encoding="utf-8")
 
 
+def write_text(path: Path, content: str) -> None:
+    ensure_dirs(path.parent)
+    path.write_text(content, encoding="utf-8")
+
+
 def load_json(path: Path) -> Any:
     if not path.exists():
         return None
@@ -163,6 +168,13 @@ def pick_focus_entries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def ensure_dirs(*paths: Path) -> None:
     for path in paths:
         path.mkdir(parents=True, exist_ok=True)
+
+
+def append_log(path: Path, message: str) -> None:
+    ensure_dirs(path.parent)
+    timestamp = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(f"[{timestamp}] {message}\n")
 
 
 def load_fact_bundle(project_root: Path, start_date: dt.date, end_date: dt.date) -> dict[str, Any]:
@@ -460,16 +472,28 @@ def build_fallback_summary(fact_bundle: dict[str, Any]) -> dict[str, Any]:
 
 def generate_summary_copy(project_root: Path, fact_bundle: dict[str, Any], settings: dict[str, str]) -> dict[str, Any]:
     prompt = render_summary_prompt(project_root, fact_bundle)
+    raw_response = ""
     response = call_llm(prompt, settings)
     if response:
+        raw_response = response
         cleaned = strip_code_fences(response)
         try:
             payload = json.loads(cleaned)
             if validate_summary_payload(payload, fact_bundle):
-                return payload
+                return {
+                    "copy": payload,
+                    "prompt": prompt,
+                    "raw_response": raw_response,
+                    "source": "llm",
+                }
         except json.JSONDecodeError:
             pass
-    return build_fallback_summary(fact_bundle)
+    return {
+        "copy": build_fallback_summary(fact_bundle),
+        "prompt": prompt,
+        "raw_response": raw_response,
+        "source": "fallback",
+    }
 
 
 def has_image_credentials(provider: str) -> bool:
@@ -477,11 +501,7 @@ def has_image_credentials(provider: str) -> bool:
         return bool(os.environ.get("GEMINI_API_KEY"))
     if provider == "dashscope":
         return bool(os.environ.get("DASHSCOPE_API_KEY"))
-    return bool(
-        os.environ.get("OPENAI_API_KEY")
-        or os.environ.get("OPENROUTER_API_KEY")
-        or os.environ.get("REPLICATE_API_TOKEN")
-    )
+    return False
 
 
 def render_template_file(path: Path, context: dict[str, Any]) -> str:
@@ -496,12 +516,11 @@ def generate_background_image(
     summary_copy: dict[str, Any],
     fact_bundle: dict[str, Any],
     output_dir: Path,
+    log_path: Path,
 ) -> Path | None:
     image_provider = os.environ.get("IMAGE_PROVIDER", settings["image_provider_default"]).strip()
     image_model = os.environ.get("IMAGE_MODEL", settings["image_model_default"]).strip()
     image_script = settings["image_gen_script"]
-    if not shutil_which("bun") or not Path(image_script).exists() or not has_image_credentials(image_provider):
-        return None
 
     prompt_context = {
         "BASEIMAGESTYLE": read_text(project_root / "config/image_style.md").strip(),
@@ -515,8 +534,21 @@ def generate_background_image(
         ),
     }
     prompt = render_template_file(project_root / "config/summary_image_prompt.md", prompt_context)
+    write_text(output_dir / "image_prompt.txt", prompt)
+    append_log(log_path, f"阶段海报图片配置: provider={image_provider}, model={image_model}, script={image_script}")
+    if not shutil_which("bun"):
+        append_log(log_path, "未找到 bun，跳过背景图生成。")
+        return None
+    if not Path(image_script).exists():
+        append_log(log_path, f"图片生成脚本不存在，跳过背景图生成: {image_script}")
+        return None
+    if not has_image_credentials(image_provider):
+        append_log(log_path, f"未配置 {image_provider} 对应图片凭证，跳过背景图生成。")
+        return None
+
     temp_output = output_dir / "background.png"
-    log_path = output_dir / "image_gen.log"
+    image_log_path = output_dir / "image_gen.log"
+    append_log(log_path, f"开始生成阶段海报背景，provider={image_provider}, model={image_model}")
 
     command = [
         "bun",
@@ -530,15 +562,17 @@ def generate_background_image(
         "--image",
         str(temp_output),
         "--ar",
-        "2:3",
+        "3:4",
         "--imageSize",
         "1K",
         "--json",
     ]
-    with log_path.open("w", encoding="utf-8") as handle:
+    with image_log_path.open("w", encoding="utf-8") as handle:
         result = subprocess.run(command, stdout=handle, stderr=subprocess.STDOUT, cwd=project_root, check=False)
     if result.returncode == 0 and temp_output.exists():
+        append_log(log_path, f"阶段海报背景生成成功: {temp_output}")
         return temp_output
+    append_log(log_path, f"阶段海报背景生成失败，详见 {image_log_path}")
     return None
 
 
@@ -818,22 +852,39 @@ def main() -> int:
     summary_name = f"{start_date.isoformat()}_{end_date.isoformat()}"
     output_root = project_root / "data/output/summaries"
     output_dir = output_root / summary_name
-    ensure_dirs(output_root, output_dir, project_root / "data/summaries", project_root / "data/images/summaries")
+    logs_root = project_root / "data/logs"
+    ensure_dirs(output_root, output_dir, logs_root, project_root / "data/summaries", project_root / "data/images/summaries")
+    run_log_path = logs_root / f"summary_{summary_name}.log"
+    write_text(run_log_path, "")
+    append_log(run_log_path, f"开始生成阶段总结: {summary_name}")
+    append_log(run_log_path, f"时间范围: {start_date.isoformat()} -> {end_date.isoformat()}")
 
     try:
         fact_bundle = load_fact_bundle(project_root, start_date, end_date)
     except ValueError as exc:
+        append_log(run_log_path, f"生成失败: {exc}")
         print(str(exc), file=sys.stderr)
         return 1
+    append_log(run_log_path, f"命中游记 {fact_bundle['days_covered']} 篇，城市链路: {fact_bundle['route_chain_text']}")
+    append_log(run_log_path, f"总交通费 {fact_bundle['total_transport_cost']} 元，余额变化 {fact_bundle['wallet_delta']} 元")
 
-    summary_copy = generate_summary_copy(project_root, fact_bundle, settings)
-    background_path = generate_background_image(project_root, settings, summary_copy, fact_bundle, output_dir)
+    summary_result = generate_summary_copy(project_root, fact_bundle, settings)
+    summary_copy = summary_result["copy"]
+    write_text(output_dir / "summary_prompt.txt", summary_result["prompt"])
+    write_text(
+        output_dir / "summary_llm_response.txt",
+        summary_result["raw_response"] if summary_result["raw_response"] else "[fallback] 本次未获得有效 LLM 原始响应，已使用脚本回退内容。\n",
+    )
+    append_log(run_log_path, f"总结文案来源: {summary_result['source']}")
+    background_path = generate_background_image(project_root, settings, summary_copy, fact_bundle, output_dir, run_log_path)
     poster_path = project_root / "data/images/summaries" / f"{summary_name}.png"
     render_poster(summary_copy, fact_bundle, poster_path, background_path)
+    append_log(run_log_path, f"路线海报已写入: {poster_path}")
 
     summary_markdown = build_summary_markdown(summary_copy, fact_bundle, summary_name)
     summary_path = project_root / "data/summaries" / f"{summary_name}.md"
-    summary_path.write_text(summary_markdown, encoding="utf-8")
+    write_text(summary_path, summary_markdown)
+    append_log(run_log_path, f"阶段总结 Markdown 已写入: {summary_path}")
 
     fact_json_payload = {
         "start_date": fact_bundle["start_date"],
@@ -868,8 +919,11 @@ def main() -> int:
     fact_json_payload["summary_markdown_path"] = str(summary_path)
     fact_json_path = output_root / f"{summary_name}.json"
     write_json(fact_json_path, fact_json_payload)
+    append_log(run_log_path, f"事实 JSON 已写入: {fact_json_path}")
 
     update_summary_index(project_root, fact_bundle, summary_path)
+    append_log(run_log_path, f"索引已更新: {project_root / 'data/journals/index.md'}")
+    append_log(run_log_path, "阶段总结生成完成。")
 
     print(f"阶段总结已生成: {summary_path}")
     print(f"路线海报已生成: {poster_path}")
