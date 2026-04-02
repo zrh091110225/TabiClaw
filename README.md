@@ -100,6 +100,22 @@ DASHSCOPE_API_KEY=your_key
 
 这也是这个项目最直接的体验方式：跑一次脚本，阿虾就会在仓库里留下新的一天。
 
+## 阶段总结
+
+除了每天前进一步，现在也可以对已经发生的一段旅程做一次回看归档：
+
+```bash
+bash scripts/period_summary.sh --start-date 2026-03-31 --end-date 2026-04-06
+```
+
+这会生成：
+
+- [`data/summaries/`](./data/summaries/) 下的一篇阶段总结
+- [`data/images/summaries/`](./data/images/summaries/) 下的一张风格化路线海报
+- [`data/output/summaries/`](./data/output/summaries/) 下的结构化事实 JSON
+
+阶段总结不会推进路线，也不会改动当前状态。它只是把一段已经走过的路重新整理成更完整的内容页。
+
 ## Skills 用法
 
 这个仓库自带一个 skill：
@@ -109,6 +125,7 @@ DASHSCOPE_API_KEY=your_key
 适合这些场景：
 
 - 让阿虾继续旅行，执行一次完整工作流
+- 生成某一段时间范围内的阶段总结和路线海报
 - 查看当前状态、当前城市、余额和路线
 - 重新规划路线或从当前终点继续追加路线
 - 初始化、清理或重置项目
@@ -131,6 +148,9 @@ bash scripts/init.sh
 
 # 执行完整的每日工作流
 bash scripts/daily_workflow.sh
+
+# 生成指定时间范围的阶段总结
+bash scripts/period_summary.sh --start-date 2026-03-31 --end-date 2026-04-06
 
 # 指定日期执行
 bash scripts/daily_workflow.sh 2026-03-31
