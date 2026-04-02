@@ -177,6 +177,16 @@ def append_log(path: Path, message: str) -> None:
         handle.write(f"[{timestamp}] {message}\n")
 
 
+def tail_nonempty_line(path: Path) -> str:
+    if not path.exists():
+        return ""
+    lines = [line.strip() for line in path.read_text(encoding="utf-8", errors="replace").splitlines()]
+    for line in reversed(lines):
+        if line:
+            return line
+    return ""
+
+
 def load_fact_bundle(project_root: Path, start_date: dt.date, end_date: dt.date) -> dict[str, Any]:
     rows = parse_journal_index(project_root / "data/journals/index.md")
     selected = [
@@ -307,20 +317,30 @@ def strip_code_fences(text: str) -> str:
     return value.strip()
 
 
-def call_llm(prompt: str, settings: dict[str, str]) -> str | None:
-    api_key = os.environ.get("LLM_API_KEY", "").strip()
+def resolve_text_llm_config(settings: dict[str, str]) -> dict[str, str]:
+    return {
+        "api_key": os.environ.get("LLM_API_KEY", "").strip(),
+        "provider": os.environ.get("LLM_PROVIDER", settings["llm_provider_default"]).strip(),
+        "base_url": os.environ.get("LLM_BASE_URL", settings["llm_base_url_default"]).strip().rstrip("/"),
+        "model": os.environ.get("WRITER_MODEL", settings["writer_model_default"]).strip(),
+    }
+
+
+def call_llm(prompt: str, settings: dict[str, str], temperature: float = 0.55) -> str | None:
+    llm_config = resolve_text_llm_config(settings)
+    api_key = llm_config["api_key"]
     if not api_key:
         return None
 
-    provider = os.environ.get("LLM_PROVIDER", settings["llm_provider_default"]).strip()
-    base_url = os.environ.get("LLM_BASE_URL", settings["llm_base_url_default"]).strip().rstrip("/")
-    model = os.environ.get("WRITER_MODEL", settings["writer_model_default"]).strip()
+    provider = llm_config["provider"]
+    base_url = llm_config["base_url"]
+    model = llm_config["model"]
 
     try:
         if provider == "gemini":
             payload = {
                 "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {"temperature": 0.55},
+                "generationConfig": {"temperature": temperature},
             }
             request = urllib.request.Request(
                 f"{base_url}/models/{model}:generateContent?key={api_key}",
@@ -334,7 +354,7 @@ def call_llm(prompt: str, settings: dict[str, str]) -> str | None:
 
         payload = {
             "model": model,
-            "temperature": 0.55,
+            "temperature": temperature,
             "messages": [{"role": "user", "content": prompt}],
         }
         request = urllib.request.Request(
@@ -510,6 +530,65 @@ def render_template_file(path: Path, context: dict[str, Any]) -> str:
     return render_template(text, env)
 
 
+def clean_generated_prompt(text: str) -> str:
+    value = strip_code_fences(text or "")
+    value = value.replace("\\_", "_")
+    value = re.sub(r"\s+", " ", value).strip()
+    return value
+
+
+def build_fallback_image_prompt(summary_copy: dict[str, Any], fact_bundle: dict[str, Any]) -> str:
+    city_lines = "，".join(
+        f"{entry['city']}的{entry['landmark'] or entry['city']}"
+        for entry in fact_bundle["entries"][:4]
+    )
+    return (
+        f"卷轴式旅行路线海报背景，一只淡红色小龙虾戴着小草帽，在从{fact_bundle['entries'][0]['city']}到"
+        f"{fact_bundle['entries'][-1]['city']}的旅途中慢慢前行，画面保留大面积留白，适合后期叠加路线信息，"
+        f"串联城市意象包括{city_lines}，治愈系手绘水彩，低饱和莫兰迪色，细铅笔线稿，粗糙纸张纹理，"
+        f"2D扁平极简，旅行的青蛙审美，吉卜力绘本风格。"
+    )
+
+
+def generate_image_prompt(
+    project_root: Path,
+    settings: dict[str, str],
+    summary_copy: dict[str, Any],
+    fact_bundle: dict[str, Any],
+    output_dir: Path,
+    log_path: Path,
+) -> str:
+    prompt_context = {
+        "BASEIMAGESTYLE": read_text(project_root / "config/image_style.md").strip(),
+        "SUMMARYIMAGESTYLE": read_text(project_root / "config/summary_image_style.md").strip(),
+        "SUMMARYTITLE": summary_copy["title"],
+        "SUMMARYHOOK": summary_copy["hook"],
+        "ROUTECHAINTEXT": fact_bundle["route_chain_text"],
+        "CITYLANDMARKLINES": "\n".join(
+            f"{index + 1}. {entry['city']} - {entry['landmark'] or entry['city']}"
+            for index, entry in enumerate(fact_bundle["entries"])
+        ),
+    }
+    request_prompt = render_template_file(project_root / "config/summary_image_prompt.md", prompt_context)
+    write_text(output_dir / "image_prompt_request.txt", request_prompt)
+    append_log(log_path, "已写入阶段海报图片提示词请求。")
+
+    generated_prompt = call_llm(request_prompt, settings, temperature=0.7)
+    if generated_prompt:
+        write_text(output_dir / "image_prompt_response.txt", generated_prompt)
+        cleaned = clean_generated_prompt(generated_prompt)
+        if cleaned:
+            write_text(output_dir / "image_prompt.txt", cleaned)
+            append_log(log_path, "阶段海报最终图片提示词由文本 LLM 生成。")
+            return cleaned
+
+    fallback = build_fallback_image_prompt(summary_copy, fact_bundle)
+    write_text(output_dir / "image_prompt_response.txt", "[fallback] 未获得有效图片提示词响应，已使用脚本回退提示词。\n")
+    write_text(output_dir / "image_prompt.txt", fallback)
+    append_log(log_path, "阶段海报最终图片提示词使用脚本回退。")
+    return fallback
+
+
 def generate_background_image(
     project_root: Path,
     settings: dict[str, str],
@@ -521,20 +600,7 @@ def generate_background_image(
     image_provider = os.environ.get("IMAGE_PROVIDER", settings["image_provider_default"]).strip()
     image_model = os.environ.get("IMAGE_MODEL", settings["image_model_default"]).strip()
     image_script = settings["image_gen_script"]
-
-    prompt_context = {
-        "BASEIMAGESTYLE": read_text(project_root / "config/image_style.md").strip(),
-        "SUMMARYIMAGESTYLE": read_text(project_root / "config/summary_image_style.md").strip(),
-        "SUMMARYTITLE": summary_copy["title"],
-        "SUMMARYHOOK": summary_copy["hook"],
-        "ROUTECHAINTEXT": fact_bundle["route_chain_text"],
-        "CITYLANDMARKLINES": "\n".join(
-            f"{index + 1}. {entry['city']} - {entry['landmark'] or '未找到可靠景点数据'}"
-            for index, entry in enumerate(fact_bundle["entries"])
-        ),
-    }
-    prompt = render_template_file(project_root / "config/summary_image_prompt.md", prompt_context)
-    write_text(output_dir / "image_prompt.txt", prompt)
+    prompt = generate_image_prompt(project_root, settings, summary_copy, fact_bundle, output_dir, log_path)
     append_log(log_path, f"阶段海报图片配置: provider={image_provider}, model={image_model}, script={image_script}")
     if not shutil_which("bun"):
         append_log(log_path, "未找到 bun，跳过背景图生成。")
@@ -572,7 +638,11 @@ def generate_background_image(
     if result.returncode == 0 and temp_output.exists():
         append_log(log_path, f"阶段海报背景生成成功: {temp_output}")
         return temp_output
+    failure_reason = tail_nonempty_line(image_log_path) or f"exit_code={result.returncode}"
+    write_text(output_dir / "image_failure.txt", failure_reason + "\n")
+    append_log(log_path, f"阶段海报背景生成失败，原因: {failure_reason}")
     append_log(log_path, f"阶段海报背景生成失败，详见 {image_log_path}")
+    append_log(log_path, "已降级为纯脚本绘制路线海报，不使用模型背景图。")
     return None
 
 
@@ -858,6 +928,11 @@ def main() -> int:
     write_text(run_log_path, "")
     append_log(run_log_path, f"开始生成阶段总结: {summary_name}")
     append_log(run_log_path, f"时间范围: {start_date.isoformat()} -> {end_date.isoformat()}")
+    llm_config = resolve_text_llm_config(settings)
+    append_log(
+        run_log_path,
+        f"文字模型配置: provider={llm_config['provider']}, model={llm_config['model']}, base_url={llm_config['base_url']}",
+    )
 
     try:
         fact_bundle = load_fact_bundle(project_root, start_date, end_date)
