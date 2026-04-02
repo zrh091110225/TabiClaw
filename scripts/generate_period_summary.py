@@ -761,7 +761,8 @@ def generate_background_image(
     image_provider = os.environ.get("IMAGE_PROVIDER", settings["image_provider_default"]).strip()
     image_model = os.environ.get("IMAGE_MODEL", settings["image_model_default"]).strip()
     image_script = settings["image_gen_script"]
-    prompt = generate_image_prompt(project_root, settings, summary_copy, fact_bundle, output_dir, log_path)
+    generate_image_prompt(project_root, settings, summary_copy, fact_bundle, output_dir, log_path)
+    prompt_file = output_dir / "image_prompt.txt"
     append_log(log_path, f"阶段海报图片配置: provider={image_provider}, model={image_model}, script={image_script}")
     if not shutil_which("bun"):
         append_log(log_path, "未找到 bun，跳过背景图生成。")
@@ -784,8 +785,8 @@ def generate_background_image(
         image_provider,
         "--model",
         image_model,
-        "--prompt",
-        prompt,
+        "--promptfiles",
+        str(prompt_file),
         "--image",
         str(temp_output),
         "--ar",

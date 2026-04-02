@@ -483,7 +483,7 @@ echo "[10/11] 生成图片..."
 log_info "步骤10: 生成图片"
 
 IMAGE_OUTPUT="$PROJECT_ROOT/data/images/${TARGET_DATE}-${NEXT_CITY}.png"
-IMAGE_PROMPT_FOR_GEN="$IMAGE_PROMPT"
+IMAGE_PROMPT_FILE="$PROJECT_ROOT/data/output/image_prompt_${TARGET_DATE}.txt"
 
 # 检查 bun 是否可用
 if ! command -v bun &>/dev/null; then
@@ -510,7 +510,7 @@ else
     if bun "$BAOYU_IMAGE_GEN" \
       --provider "$IMAGE_PROVIDER" \
       --model "$IMAGE_MODEL" \
-      --prompt "$IMAGE_PROMPT_FOR_GEN" \
+      --promptfiles "$IMAGE_PROMPT_FILE" \
       --image "$IMAGE_OUTPUT" \
       --ar 3:4 \
       --imageSize 1K \
