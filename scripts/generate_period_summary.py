@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import math
 import os
 import random
 import re
@@ -15,7 +16,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
+from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps, ImageStat
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
@@ -60,13 +61,11 @@ JOURNAL_ATTRACTION_CANDIDATES = [
 ]
 
 CANVAS_SIZE = (1200, 1800)
-CARD_WIDTH = 430
-CARD_HEIGHT = 160
-TOP_MARGIN = 280
-BOTTOM_MARGIN = 300
-ROUTE_X = CANVAS_SIZE[0] // 2
+TOP_MARGIN = 270
+BOTTOM_MARGIN = 230
 LINE_COLOR = (183, 92, 78, 255)
-CARD_FILL = (252, 247, 240, 236)
+SOFT_LINE_COLOR = (191, 108, 92, 180)
+CARD_FILL = (251, 247, 241, 190)
 PAPER_BG = (246, 238, 226, 255)
 
 
@@ -332,12 +331,29 @@ def append_log(path: Path, message: str) -> None:
         handle.write(f"[{timestamp}] {message}\n")
 
 
+def print_console_block(title: str, content: str) -> None:
+    print(f"\n[{title}]")
+    print("=" * 72)
+    print(content.rstrip())
+    print("=" * 72)
+
+
+def print_console_llm_request(label: str, llm_config: dict[str, str], temperature: float, prompt: str) -> None:
+    print(f"  {label} LLM 参数: provider={llm_config['provider']}, model={llm_config['model']}, base_url={llm_config['base_url']}, temperature={temperature}")
+    print_console_block(f"{label} LLM Prompt", prompt)
+
+
+def print_console_image_request(label: str, provider: str, model: str, size: str, prompt: str) -> None:
+    print(f"  {label} 图片模型参数: provider={provider}, model={model}, size={size}")
+    print_console_block(f"{label} 图片 Prompt", prompt)
+
+
 def tail_nonempty_line(path: Path) -> str:
     if not path.exists():
         return ""
     lines = [line.strip() for line in path.read_text(encoding="utf-8", errors="replace").splitlines()]
     for line in reversed(lines):
-        if line:
+        if line and not line.startswith("=== attempt"):
             return line
     return ""
 
@@ -654,6 +670,8 @@ def build_fallback_summary(fact_bundle: dict[str, Any]) -> dict[str, Any]:
 def generate_summary_copy(project_root: Path, fact_bundle: dict[str, Any], settings: dict[str, str]) -> dict[str, Any]:
     prompt = render_summary_prompt(project_root, fact_bundle)
     raw_response = ""
+    llm_config = resolve_text_llm_config(settings)
+    print_console_llm_request("阶段总结文案", llm_config, 0.55, prompt)
     response = call_llm(prompt, settings)
     if response:
         raw_response = response
@@ -698,16 +716,87 @@ def clean_generated_prompt(text: str) -> str:
     return value
 
 
+def resolve_summary_image_config(settings: dict[str, str]) -> dict[str, str]:
+    return {
+        "mode": os.environ.get("SUMMARY_IMAGE_MODE", settings.get("summary_image_mode_default", "single_pass")).strip() or "single_pass",
+        "provider": os.environ.get("IMAGE_PROVIDER", settings.get("image_provider_default", "google")).strip() or "google",
+        "model": os.environ.get("IMAGE_MODEL", settings.get("image_model_default", "gemini-3.1-flash-image-preview")).strip() or "gemini-3.1-flash-image-preview",
+    }
+
+
+def describe_scene_zone(index: int, total: int) -> str:
+    if total <= 1:
+        return "画面中下部"
+    progress = index / (total - 1)
+    if progress <= 0.18:
+        return "画面下部偏左"
+    if progress <= 0.4:
+        return "画面下部偏中"
+    if progress <= 0.62:
+        return "画面中段偏右"
+    if progress <= 0.82:
+        return "画面上部偏左"
+    return "画面上部偏右"
+
+
+def describe_scene_mood(entry: dict[str, Any]) -> str:
+    landmark = entry["landmark"] or entry["city"]
+    if any(token in landmark for token in ("西湖", "泉", "水", "湖", "河", "桥")):
+        return "更湿润、柔和、带雾气与流动水纹"
+    if any(token in landmark for token in ("城墙", "石", "砖", "塔", "寺")):
+        return "更沉稳、克制、带砖石与历史质感"
+    return "安静、缓慢、像路上停下来的一次回望"
+
+
+def build_scene_anchor_lines(fact_bundle: dict[str, Any]) -> str:
+    lines: list[str] = []
+    entries = fact_bundle["entries"]
+    for index, entry in enumerate(entries):
+        zone = describe_scene_zone(index, len(entries))
+        landmark = entry["landmark"] or entry["city"]
+        mood = describe_scene_mood(entry)
+        if index == 0:
+            transition = "作为旅程起点，气息最轻，适合让画面先从柔和处展开。"
+        else:
+            prev_city = entries[index - 1]["city"]
+            transition = f"要从上一段 {prev_city} 的质感自然过渡过来，不要像拼贴切块。"
+        lines.append(f"{index + 1}. {entry['city']}：放在{zone}，核心意象是{landmark}，整体氛围{mood}。{transition}")
+    return "\n".join(lines)
+
+
+def build_transition_lines(fact_bundle: dict[str, Any]) -> str:
+    entries = fact_bundle["entries"]
+    if len(entries) <= 1:
+        return "整张图只有一个场景段，仍要保留旅程未停下的缓慢流动感。"
+    lines: list[str] = []
+    for prev, current in zip(entries, entries[1:]):
+        lines.append(f"{prev['city']} → {current['city']}：通过溪流、小路、风向、石阶或云气自然连接，不要出现断裂切换。")
+    return "\n".join(lines)
+
+
+def build_image_constraint_summary(summary_copy: dict[str, Any], fact_bundle: dict[str, Any]) -> str:
+    lines = [
+        f"标题气质：{summary_copy['title']}",
+        f"事实链路：{fact_bundle['start_date']} 至 {fact_bundle['end_date']}，{fact_bundle['route_chain_text']}，总交通费 {fact_bundle['total_transport_cost']} 元。",
+        "控制重点：构图骨架、路线流动感、城市顺序的空间分布、各城市代表意象。",
+        "硬性约束：不是地图、不是 UI、不是旅游宣传页、不要中轴时间线、不要硬卡片、不要整齐标签、不要明显文字。",
+        "文字策略：允许极少量装饰性文字，但不能依赖图中文字承载事实，出现大段文字或乱码视为失败倾向。",
+        "视觉目标：做成阶段旅程主视觉海报，而不是精确信息图。",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def build_fallback_image_prompt(summary_copy: dict[str, Any], fact_bundle: dict[str, Any]) -> str:
-    city_lines = "，".join(
-        f"{entry['city']}的{entry['landmark'] or entry['city']}"
-        for entry in fact_bundle["entries"][:4]
+    city_lines = "；".join(
+        f"{entry['city']}放在{describe_scene_zone(index, len(fact_bundle['entries']))}，核心意象是{entry['landmark'] or entry['city']}"
+        for index, entry in enumerate(fact_bundle["entries"][:6])
     )
     return (
-        f"卷轴式旅行路线海报背景，一只淡红色小龙虾戴着小草帽，在从{fact_bundle['entries'][0]['city']}到"
-        f"{fact_bundle['entries'][-1]['city']}的旅途中慢慢前行，画面保留大面积留白，适合后期叠加路线信息，"
-        f"串联城市意象包括{city_lines}，治愈系手绘水彩，低饱和莫兰迪色，细铅笔线稿，粗糙纸张纹理，"
-        f"2D扁平极简，旅行的青蛙审美，吉卜力绘本风格。"
+        f"一张纵向阶段旅程主视觉海报，主题是“{summary_copy['title']}”，不是地图，不是UI，不是旅游宣传页。"
+        f"画面表现从{fact_bundle['entries'][0]['city']}到{fact_bundle['entries'][-1]['city']}的连续旅程，整体沿左下到右上缓慢推进，"
+        f"路线只通过溪流、小路、风向、水汽、石阶等隐性元素表达，不要时间轴，不要硬直线，不要明显文字。"
+        f"{city_lines}。各场景必须自然过渡，不要像三张拼贴。"
+        f"吉卜力绘本风格，旅行的青蛙审美，治愈系日式手绘水彩，低饱和莫兰迪色，细铅笔线稿，明显粗糙纸纹，2D扁平极简。"
     )
 
 
@@ -725,86 +814,162 @@ def generate_image_prompt(
         "SUMMARYTITLE": summary_copy["title"],
         "SUMMARYHOOK": summary_copy["hook"],
         "ROUTECHAINTEXT": fact_bundle["route_chain_text"],
-        "CITYLANDMARKLINES": "\n".join(
-            f"{index + 1}. {entry['city']} - {entry['landmark'] or entry['city']}"
-            for index, entry in enumerate(fact_bundle["entries"])
-        ),
+        "CITYLANDMARKLINES": "\n".join(f"{index + 1}. {entry['city']} - {entry['landmark'] or entry['city']}" for index, entry in enumerate(fact_bundle["entries"])),
+        "SCENEANCHORLINES": build_scene_anchor_lines(fact_bundle),
+        "TRANSITIONLINES": build_transition_lines(fact_bundle),
+        "FACTLINE": f"{fact_bundle['start_date']} 至 {fact_bundle['end_date']}，{fact_bundle['route_chain_text']}，总交通费 {fact_bundle['total_transport_cost']} 元。",
     }
     request_prompt = render_template_file(project_root / "config/summary_image_prompt.md", prompt_context)
     write_text(output_dir / "image_prompt_request.txt", request_prompt)
-    append_log(log_path, "已写入阶段海报图片提示词请求。")
+    append_log(log_path, "已写入阶段海报单次生成提示词请求。")
 
+    llm_config = resolve_text_llm_config(settings)
+    print_console_llm_request("阶段海报提示词", llm_config, 0.7, request_prompt)
     generated_prompt = call_llm(request_prompt, settings, temperature=0.7)
     if generated_prompt:
         write_text(output_dir / "image_prompt_response.txt", generated_prompt)
         cleaned = clean_generated_prompt(generated_prompt)
         if cleaned:
             write_text(output_dir / "image_prompt.txt", cleaned)
-            append_log(log_path, "阶段海报最终图片提示词由文本 LLM 生成。")
+            append_log(log_path, "阶段海报最终单次生成提示词由文本 LLM 生成。")
             return cleaned
 
     fallback = build_fallback_image_prompt(summary_copy, fact_bundle)
     write_text(output_dir / "image_prompt_response.txt", "[fallback] 未获得有效图片提示词响应，已使用脚本回退提示词。\n")
     write_text(output_dir / "image_prompt.txt", fallback)
-    append_log(log_path, "阶段海报最终图片提示词使用脚本回退。")
+    append_log(log_path, "阶段海报最终单次生成提示词使用脚本回退。")
     return fallback
 
 
-def generate_background_image(
+def validate_generated_poster(image_path: Path) -> dict[str, Any]:
+    report: dict[str, Any] = {"passed": True, "issues": [], "warnings": [], "metrics": {}}
+    if not image_path.exists():
+        report["passed"] = False
+        report["issues"].append("图片文件不存在")
+        return report
+    try:
+        with Image.open(image_path) as image:
+            width, height = image.size
+            report["metrics"]["width"] = width
+            report["metrics"]["height"] = height
+            report["metrics"]["file_size"] = image_path.stat().st_size
+            if width < 900 or height < 1200:
+                report["issues"].append("图片尺寸过小")
+            if image_path.stat().st_size < 80_000:
+                report["issues"].append("图片文件体积异常偏小")
+            gray = image.convert("L")
+            full_std = ImageStat.Stat(gray).stddev[0]
+            center_box = (
+                int(width * 0.28),
+                int(height * 0.22),
+                int(width * 0.72),
+                int(height * 0.78),
+            )
+            center_std = ImageStat.Stat(gray.crop(center_box)).stddev[0]
+            report["metrics"]["full_stddev"] = round(full_std, 2)
+            report["metrics"]["center_stddev"] = round(center_std, 2)
+            if center_std > max(68.0, full_std * 1.22):
+                report["issues"].append("画面中心区域过满")
+            elif center_std > max(58.0, full_std * 1.12):
+                report["warnings"].append("画面中心区域偏满")
+    except OSError as exc:
+        report["passed"] = False
+        report["issues"].append(f"图片无法读取: {exc}")
+        return report
+    report["passed"] = len(report["issues"]) == 0
+    return report
+
+
+def generate_single_pass_poster(
     project_root: Path,
     settings: dict[str, str],
     summary_copy: dict[str, Any],
     fact_bundle: dict[str, Any],
     output_dir: Path,
+    poster_path: Path,
     log_path: Path,
 ) -> Path | None:
-    image_provider = os.environ.get("IMAGE_PROVIDER", settings["image_provider_default"]).strip()
-    image_model = os.environ.get("IMAGE_MODEL", settings["image_model_default"]).strip()
+    image_config = resolve_summary_image_config(settings)
+    mode = image_config["mode"]
+    image_provider = image_config["provider"]
+    image_model = image_config["model"]
     image_script = settings["image_gen_script"]
+    if mode != "single_pass":
+        append_log(log_path, f"SUMMARY_IMAGE_MODE={mode} 当前未实现，回退为 single_pass。")
     generate_image_prompt(project_root, settings, summary_copy, fact_bundle, output_dir, log_path)
     prompt_file = output_dir / "image_prompt.txt"
+    constraints = build_image_constraint_summary(summary_copy, fact_bundle)
+    write_text(output_dir / "image_constraints.txt", constraints)
+    append_log(log_path, f"阶段海报模式: single_pass")
     append_log(log_path, f"阶段海报图片配置: provider={image_provider}, model={image_model}, script={image_script}")
+    append_log(log_path, f"单次生成约束摘要: {constraints.replace(chr(10), ' | ').strip()}")
+    print_console_image_request("阶段海报单次生成", image_provider, image_model, "1200x1800", read_text(prompt_file))
     if not shutil_which("bun"):
-        append_log(log_path, "未找到 bun，跳过背景图生成。")
+        append_log(log_path, "未找到 bun，跳过阶段海报单次生成。")
+        if poster_path.exists():
+            append_log(log_path, f"沿用已有阶段海报: {poster_path}")
+            return poster_path
         return None
     if not Path(image_script).exists():
-        append_log(log_path, f"图片生成脚本不存在，跳过背景图生成: {image_script}")
+        append_log(log_path, f"图片生成脚本不存在，跳过阶段海报单次生成: {image_script}")
+        if poster_path.exists():
+            append_log(log_path, f"沿用已有阶段海报: {poster_path}")
+            return poster_path
         return None
     if not has_image_credentials(image_provider):
-        append_log(log_path, f"未配置 {image_provider} 对应图片凭证，跳过背景图生成。")
+        append_log(log_path, f"未配置 {image_provider} 对应图片凭证，跳过阶段海报单次生成。")
+        if poster_path.exists():
+            append_log(log_path, f"沿用已有阶段海报: {poster_path}")
+            return poster_path
         return None
 
-    temp_output = output_dir / "background.png"
     image_log_path = output_dir / "image_gen.log"
-    append_log(log_path, f"开始生成阶段海报背景，provider={image_provider}, model={image_model}")
+    write_text(image_log_path, "")
+    append_log(log_path, f"开始单次生成阶段海报，provider={image_provider}, model={image_model}")
+    for attempt in range(1, 4):
+        temp_output = output_dir / f"poster_attempt_{attempt}.png"
+        command = [
+            "bun",
+            image_script,
+            "--provider",
+            image_provider,
+            "--model",
+            image_model,
+            "--promptfiles",
+            str(prompt_file),
+            "--image",
+            str(temp_output),
+            "--size",
+            "1200x1800",
+            "--json",
+        ]
+        with image_log_path.open("a", encoding="utf-8") as handle:
+            handle.write(f"=== attempt {attempt} ===\n")
+            result = subprocess.run(command, stdout=handle, stderr=subprocess.STDOUT, cwd=project_root, check=False)
+            handle.write("\n")
+        if result.returncode != 0 or not temp_output.exists():
+            failure_reason = tail_nonempty_line(image_log_path) or f"exit_code={result.returncode}"
+            append_log(log_path, f"阶段海报单次生成失败，第 {attempt} 次尝试未产出可用图片，原因: {failure_reason}")
+            continue
 
-    command = [
-        "bun",
-        image_script,
-        "--provider",
-        image_provider,
-        "--model",
-        image_model,
-        "--promptfiles",
-        str(prompt_file),
-        "--image",
-        str(temp_output),
-        "--ar",
-        "3:4",
-        "--imageSize",
-        "1K",
-        "--json",
-    ]
-    with image_log_path.open("w", encoding="utf-8") as handle:
-        result = subprocess.run(command, stdout=handle, stderr=subprocess.STDOUT, cwd=project_root, check=False)
-    if result.returncode == 0 and temp_output.exists():
-        append_log(log_path, f"阶段海报背景生成成功: {temp_output}")
-        return temp_output
-    failure_reason = tail_nonempty_line(image_log_path) or f"exit_code={result.returncode}"
+        validation = validate_generated_poster(temp_output)
+        write_json(output_dir / f"image_validation_attempt_{attempt}.json", validation)
+        if validation["passed"]:
+            temp_output.replace(poster_path)
+            append_log(log_path, f"阶段海报单次生成成功: {poster_path}")
+            if validation["warnings"]:
+                append_log(log_path, f"阶段海报校验警告: {'；'.join(validation['warnings'])}")
+            return poster_path
+
+        append_log(log_path, f"阶段海报校验未通过，第 {attempt} 次尝试存在问题: {'；'.join(validation['issues'])}")
+
+    failure_reason = tail_nonempty_line(image_log_path) or "single_pass_generation_failed"
     write_text(output_dir / "image_failure.txt", failure_reason + "\n")
-    append_log(log_path, f"阶段海报背景生成失败，原因: {failure_reason}")
-    append_log(log_path, f"阶段海报背景生成失败，详见 {image_log_path}")
-    append_log(log_path, "已降级为纯脚本绘制路线海报，不使用模型背景图。")
+    append_log(log_path, f"阶段海报单次生成最终失败，详见 {image_log_path}")
+    if poster_path.exists():
+        append_log(log_path, f"保留已有成功海报: {poster_path}")
+        return poster_path
+    append_log(log_path, "未生成新的阶段海报，将仅输出文字总结。")
     return None
 
 
@@ -879,6 +1044,158 @@ def draw_centered_text(draw: ImageDraw.ImageDraw, center_x: int, y: int, text: s
     return bbox[3] - bbox[1]
 
 
+def compute_route_anchors(count: int) -> list[tuple[float, float]]:
+    if count <= 0:
+        return []
+    if count == 1:
+        return [(CANVAS_SIZE[0] * 0.48, CANVAS_SIZE[1] * 0.58)]
+
+    left_margin = 250
+    right_margin = CANVAS_SIZE[0] - 250
+    bottom = CANVAS_SIZE[1] - BOTTOM_MARGIN - 90
+    top = TOP_MARGIN + 210
+    anchors: list[tuple[float, float]] = []
+    for index in range(count):
+        progress = index / (count - 1)
+        x_base = left_margin + (right_margin - left_margin) * progress
+        x_wave = math.sin(progress * math.pi * 1.4) * 78
+        x = x_base + x_wave
+        y = bottom - (bottom - top) * progress
+        y += math.sin(progress * math.pi * 2.2) * 24
+        anchors.append((x, y))
+    return anchors
+
+
+def sample_catmull_rom(points: list[tuple[float, float]], samples_per_segment: int = 28) -> list[tuple[float, float]]:
+    if len(points) <= 1:
+        return points
+    extended = [points[0], *points, points[-1]]
+    sampled: list[tuple[float, float]] = []
+    for index in range(1, len(extended) - 2):
+        p0 = extended[index - 1]
+        p1 = extended[index]
+        p2 = extended[index + 1]
+        p3 = extended[index + 2]
+        for step in range(samples_per_segment):
+            t = step / samples_per_segment
+            t2 = t * t
+            t3 = t2 * t
+            x = 0.5 * (
+                (2 * p1[0])
+                + (-p0[0] + p2[0]) * t
+                + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * t2
+                + (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * t3
+            )
+            y = 0.5 * (
+                (2 * p1[1])
+                + (-p0[1] + p2[1]) * t
+                + (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * t2
+                + (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * t3
+            )
+            sampled.append((x, y))
+    sampled.append(points[-1])
+    return sampled
+
+
+def measure_text(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont) -> tuple[int, int]:
+    bbox = draw.textbbox((0, 0), text, font=font)
+    return bbox[2] - bbox[0], bbox[3] - bbox[1]
+
+
+def fit_landmark_lines(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, max_width: int) -> list[str]:
+    lines = wrap_text(draw, text, font, max_width)
+    if len(lines) <= 2:
+        return lines
+    merged = lines[:1] + ["".join(lines[1:])]
+    while merged and len(merged) > 1:
+        width, _ = measure_text(draw, merged[1], font)
+        if width <= max_width:
+            return merged
+        merged[1] = merged[1][:-1] + "…"
+        if measure_text(draw, merged[1], font)[0] <= max_width:
+            return merged
+    return [lines[0][: max(1, len(lines[0]) - 1)] + "…"]
+
+
+def draw_route_path(draw: ImageDraw.ImageDraw, points: list[tuple[float, float]]) -> None:
+    if len(points) < 2:
+        return
+    path = sample_catmull_rom(points)
+    draw.line(path, fill=(255, 247, 242, 100), width=18)
+    draw.line(path, fill=SOFT_LINE_COLOR, width=11)
+    draw.line(path, fill=LINE_COLOR, width=5)
+
+
+def label_side_for_anchor(anchor_x: float) -> int:
+    return 1 if anchor_x < CANVAS_SIZE[0] * 0.52 else -1
+
+
+def compute_label_box(
+    draw: ImageDraw.ImageDraw,
+    anchor: tuple[float, float],
+    entry: dict[str, Any],
+    side: int,
+    date_font: ImageFont.ImageFont,
+    city_font: ImageFont.ImageFont,
+    landmark_font: ImageFont.ImageFont,
+) -> tuple[tuple[float, float, float, float], list[str]]:
+    landmark = entry["landmark"] or "这一站的轮廓仍在路上"
+    landmark_lines = fit_landmark_lines(draw, landmark, landmark_font, 220)
+    city_width, city_height = measure_text(draw, entry["city"], city_font)
+    landmark_width = max((measure_text(draw, line, landmark_font)[0] for line in landmark_lines), default=0)
+    content_width = max(city_width, landmark_width, 150)
+    box_width = min(320, max(210, content_width + 56))
+    box_height = 98 + max(0, len(landmark_lines) - 1) * 22
+    offset_x = 46 if side > 0 else -(box_width + 46)
+    offset_y = -32 if side > 0 else -22
+    x1 = anchor[0] + offset_x
+    y1 = anchor[1] + offset_y
+    x1 = max(58, min(CANVAS_SIZE[0] - box_width - 58, x1))
+    y1 = max(TOP_MARGIN + 10, min(CANVAS_SIZE[1] - BOTTOM_MARGIN - box_height - 10, y1))
+    return (x1, y1, x1 + box_width, y1 + box_height), landmark_lines
+
+
+def draw_city_label(
+    draw: ImageDraw.ImageDraw,
+    anchor: tuple[float, float],
+    entry: dict[str, Any],
+    index: int,
+    total_count: int,
+    date_font: ImageFont.ImageFont,
+    city_font: ImageFont.ImageFont,
+    landmark_font: ImageFont.ImageFont,
+    badge_font: ImageFont.ImageFont,
+) -> None:
+    side = label_side_for_anchor(anchor[0])
+    box, landmark_lines = compute_label_box(draw, anchor, entry, side, date_font, city_font, landmark_font)
+    x1, y1, x2, y2 = box
+
+    guide_target_x = x1 if side > 0 else x2
+    guide_mid_x = anchor[0] + (guide_target_x - anchor[0]) * 0.45
+    guide_mid_y = anchor[1] - 18
+    draw.line([anchor, (guide_mid_x, guide_mid_y), (guide_target_x, y1 + 58)], fill=(175, 114, 98, 185), width=2)
+
+    draw.rounded_rectangle(box, radius=28, fill=CARD_FILL, outline=(205, 180, 166, 180), width=2)
+    badge_box = (x1 + 18, y1 + 16, x1 + 92, y1 + 46)
+    draw.rounded_rectangle(badge_box, radius=16, fill=(183, 92, 78, 214))
+    draw.text((x1 + 31, y1 + 19), entry["date"][5:], font=date_font, fill=(255, 248, 242, 255))
+
+    draw.text((x1 + 20, y1 + 54), entry["city"], font=city_font, fill=(92, 63, 52, 245))
+    text_y = y1 + 94
+    for line in landmark_lines[:2]:
+        draw.text((x1 + 20, text_y), line, font=landmark_font, fill=(122, 96, 84, 220))
+        text_y += 24
+
+    is_edge = index in {0, total_count - 1}
+    halo = 28 if is_edge else 22
+    draw.ellipse((anchor[0] - halo, anchor[1] - halo, anchor[0] + halo, anchor[1] + halo), fill=(255, 251, 247, 190))
+    node_radius = 14 if is_edge else 12
+    draw.ellipse((anchor[0] - node_radius, anchor[1] - node_radius, anchor[0] + node_radius, anchor[1] + node_radius), fill=(252, 247, 241, 255), outline=LINE_COLOR, width=4)
+    num = str(index + 1)
+    num_w, num_h = measure_text(draw, num, badge_font)
+    draw.text((anchor[0] - num_w / 2, anchor[1] - num_h / 2 - 1), num, font=badge_font, fill=(123, 67, 54, 255))
+
+
 def render_poster(
     summary_copy: dict[str, Any],
     fact_bundle: dict[str, Any],
@@ -895,56 +1212,32 @@ def render_poster(
     overlay = Image.new("RGBA", CANVAS_SIZE, (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
 
-    title_font = load_font(52, bold=True)
-    hook_font = load_font(24)
-    meta_font = load_font(24)
-    card_title_font = load_font(34, bold=True)
-    card_body_font = load_font(22)
-    badge_font = load_font(20, bold=True)
+    title_font = load_font(48, bold=True)
+    hook_font = load_font(23)
+    meta_font = load_font(22)
+    city_font = load_font(34, bold=True)
+    landmark_font = load_font(21)
+    date_font = load_font(18, bold=True)
+    badge_font = load_font(18, bold=True)
 
-    draw.rounded_rectangle((70, 70, CANVAS_SIZE[0] - 70, 220), radius=36, fill=(250, 245, 238, 224), outline=(208, 183, 165, 200), width=3)
-    draw_centered_text(draw, CANVAS_SIZE[0] // 2, 96, summary_copy["title"], title_font, (90, 62, 51, 255))
-    hook_lines = wrap_text(draw, summary_copy["hook"], hook_font, CANVAS_SIZE[0] - 220)
-    current_y = 162
+    draw.rounded_rectangle((96, 74, CANVAS_SIZE[0] - 96, 198), radius=34, fill=(250, 245, 238, 196), outline=(215, 194, 178, 128), width=2)
+    draw_centered_text(draw, CANVAS_SIZE[0] // 2, 96, summary_copy["title"], title_font, (90, 62, 51, 245))
+    hook_lines = wrap_text(draw, summary_copy["hook"], hook_font, CANVAS_SIZE[0] - 280)
+    current_y = 149
     for line in hook_lines[:2]:
-        height = draw_centered_text(draw, CANVAS_SIZE[0] // 2, current_y, line, hook_font, (112, 86, 74, 235))
-        current_y += height + 6
-
-    route_top = TOP_MARGIN + CARD_HEIGHT // 2
-    route_bottom = CANVAS_SIZE[1] - BOTTOM_MARGIN
-    draw.line((ROUTE_X, route_top, ROUTE_X, route_bottom), fill=LINE_COLOR, width=10)
+        height = draw_centered_text(draw, CANVAS_SIZE[0] // 2, current_y, line, hook_font, (112, 86, 74, 220))
+        current_y += height + 4
 
     entries = fact_bundle["entries"]
-    available_height = route_bottom - route_top
-    step = available_height // max(1, len(entries) - 1) if len(entries) > 1 else 0
+    anchors = compute_route_anchors(len(entries))
+    draw_route_path(draw, anchors)
 
-    for index, entry in enumerate(entries):
-        y = route_top + index * step if len(entries) > 1 else (route_top + route_bottom) // 2
-        side = -1 if index % 2 == 0 else 1
-        card_x = ROUTE_X + 90 if side > 0 else ROUTE_X - 90 - CARD_WIDTH
-        card_y = y - CARD_HEIGHT // 2
-        card_box = (card_x, card_y, card_x + CARD_WIDTH, card_y + CARD_HEIGHT)
-
-        draw.line((ROUTE_X, y, card_x + (0 if side > 0 else CARD_WIDTH), y), fill=LINE_COLOR, width=5)
-        draw.ellipse((ROUTE_X - 20, y - 20, ROUTE_X + 20, y + 20), fill=(255, 252, 248, 255), outline=LINE_COLOR, width=6)
-        draw.text((ROUTE_X - 9, y - 13), str(index + 1), font=badge_font, fill=(123, 67, 54, 255))
-
-        draw.rounded_rectangle(card_box, radius=28, fill=CARD_FILL, outline=(196, 160, 145, 255), width=3)
-        badge_box = (card_x + 18, card_y + 18, card_x + 92, card_y + 52)
-        draw.rounded_rectangle(badge_box, radius=18, fill=(183, 92, 78, 255))
-        draw.text((card_x + 34, card_y + 22), entry["date"][5:], font=badge_font, fill=(255, 248, 242, 255))
-
-        draw.text((card_x + 22, card_y + 64), entry["city"], font=card_title_font, fill=(89, 61, 50, 255))
-        landmark = entry["landmark"] or "这一站的轮廓仍在路上"
-        lines = wrap_text(draw, landmark, card_body_font, CARD_WIDTH - 44)
-        text_y = card_y + 110
-        for line in lines[:2]:
-            draw.text((card_x + 22, text_y), line, font=card_body_font, fill=(114, 87, 74, 235))
-            text_y += 28
+    for index, (entry, anchor) in enumerate(zip(entries, anchors)):
+        draw_city_label(draw, anchor, entry, index, len(entries), date_font, city_font, landmark_font, badge_font)
 
     footer = f"{fact_bundle['route_chain_text']}  |  总交通费 {fact_bundle['total_transport_cost']} 元"
-    draw.rounded_rectangle((90, CANVAS_SIZE[1] - 120, CANVAS_SIZE[0] - 90, CANVAS_SIZE[1] - 58), radius=28, fill=(250, 245, 238, 228))
-    draw_centered_text(draw, CANVAS_SIZE[0] // 2, CANVAS_SIZE[1] - 102, footer, meta_font, (102, 76, 64, 255))
+    draw.rounded_rectangle((146, CANVAS_SIZE[1] - 112, CANVAS_SIZE[0] - 146, CANVAS_SIZE[1] - 60), radius=24, fill=(250, 245, 238, 186), outline=(214, 196, 183, 86), width=1)
+    draw_centered_text(draw, CANVAS_SIZE[0] // 2, CANVAS_SIZE[1] - 96, footer, meta_font, (102, 76, 64, 240))
 
     canvas = Image.alpha_composite(canvas, overlay)
     canvas.save(output_path)
@@ -954,7 +1247,7 @@ def format_wallet_delta(value: int) -> str:
     return f"{value:+d} 元"
 
 
-def build_summary_markdown(summary_copy: dict[str, Any], fact_bundle: dict[str, Any], file_name: str) -> str:
+def build_summary_markdown(summary_copy: dict[str, Any], fact_bundle: dict[str, Any], file_name: str, include_image: bool) -> str:
     image_rel = f"../images/summaries/{file_name}.png"
     snapshot = [
         ("经过城市数", f"{fact_bundle['city_count']} 座"),
@@ -976,9 +1269,25 @@ def build_summary_markdown(summary_copy: dict[str, Any], fact_bundle: dict[str, 
         heading = f"### {focus_entry['city']} · {focus_entry['landmark'] or focus_entry['city']}"
         city_sections.append(f"{heading}\n\n{section['body'].strip()}")
 
-    markdown = [
-        f"![阶段路线海报]({image_rel})",
-        "",
+    markdown: list[str] = []
+    if include_image:
+        markdown.extend(
+            [
+                f"![阶段路线海报]({image_rel})",
+                "",
+                f"_这张海报是阶段旅程主视觉，准确事实以本文内容为准。{fact_bundle['start_date']} 至 {fact_bundle['end_date']} · {fact_bundle['route_chain_text']} · 总交通费 {fact_bundle['total_transport_cost']} 元。_",
+                "",
+            ]
+        )
+    else:
+        markdown.extend(
+            [
+                f"_本次未生成新的阶段海报，准确事实如下：{fact_bundle['start_date']} 至 {fact_bundle['end_date']} · {fact_bundle['route_chain_text']} · 总交通费 {fact_bundle['total_transport_cost']} 元。_",
+                "",
+            ]
+        )
+
+    markdown.extend([
         f"## {summary_copy['title'].strip()}",
         "",
         f"> {summary_copy['hook'].strip()}",
@@ -1015,7 +1324,7 @@ def build_summary_markdown(summary_copy: dict[str, Any], fact_bundle: dict[str, 
         "",
         summary_copy["next_teaser"].strip(),
         "",
-    ]
+    ])
     return "\n".join(markdown)
 
 
@@ -1113,12 +1422,14 @@ def main() -> int:
         summary_result["raw_response"] if summary_result["raw_response"] else "[fallback] 本次未获得有效 LLM 原始响应，已使用脚本回退内容。\n",
     )
     append_log(run_log_path, f"总结文案来源: {summary_result['source']}")
-    background_path = generate_background_image(project_root, settings, summary_copy, fact_bundle, output_dir, run_log_path)
     poster_path = project_root / "data/images/summaries" / f"{summary_name}.png"
-    render_poster(summary_copy, fact_bundle, poster_path, background_path)
-    append_log(run_log_path, f"路线海报已写入: {poster_path}")
+    generated_poster_path = generate_single_pass_poster(project_root, settings, summary_copy, fact_bundle, output_dir, poster_path, run_log_path)
+    if generated_poster_path and generated_poster_path.exists():
+        append_log(run_log_path, f"阶段海报已写入: {generated_poster_path}")
+    else:
+        append_log(run_log_path, "阶段海报本次未生成成功。")
 
-    summary_markdown = build_summary_markdown(summary_copy, fact_bundle, summary_name)
+    summary_markdown = build_summary_markdown(summary_copy, fact_bundle, summary_name, include_image=bool(generated_poster_path and generated_poster_path.exists()))
     summary_path = project_root / "data/summaries" / f"{summary_name}.md"
     write_text(summary_path, summary_markdown)
     append_log(run_log_path, f"阶段总结 Markdown 已写入: {summary_path}")
@@ -1155,8 +1466,11 @@ def main() -> int:
         "route_chain_text": fact_bundle["route_chain_text"],
         "representative_landmark_count": fact_bundle["representative_landmark_count"],
     }
+    fact_json_payload["summary_image_mode"] = resolve_summary_image_config(settings)["mode"]
+    fact_json_payload["summary_image_provider"] = resolve_summary_image_config(settings)["provider"]
+    fact_json_payload["summary_image_model"] = resolve_summary_image_config(settings)["model"]
     fact_json_payload["summary_copy"] = summary_copy
-    fact_json_payload["poster_path"] = str(poster_path)
+    fact_json_payload["poster_path"] = str(generated_poster_path) if generated_poster_path and generated_poster_path.exists() else ""
     fact_json_payload["summary_markdown_path"] = str(summary_path)
     fact_json_path = output_root / f"{summary_name}.json"
     write_json(fact_json_path, fact_json_payload)

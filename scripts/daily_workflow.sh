@@ -258,7 +258,17 @@ ATTRACTION_3="${ATTRACTION_3:-路边小摊}"
 echo "  景点1: $ATTRACTION_1"
 echo "  景点2: $ATTRACTION_2"
 echo "  景点3: $ATTRACTION_3"
-ATTRACTION_SUMMARY=$(printf '%s\n' "$ATTRACTION_1" "$ATTRACTION_2" "$ATTRACTION_3" | awk 'NF && !seen[$0]++' | paste -sd '、' -)
+ATTRACTION_SUMMARY=$(printf '%s\n' "$ATTRACTION_1" "$ATTRACTION_2" "$ATTRACTION_3" | awk '
+  NF && !seen[$0]++ {
+    items[++count] = $0
+  }
+  END {
+    for (i = 1; i <= count; i++) {
+      printf "%s%s", (i > 1 ? "、" : ""), items[i]
+    }
+    printf "\n"
+  }
+')
 
 # 6. 获取天气 - JSON 版
 echo "[7/11] 获取天气..."

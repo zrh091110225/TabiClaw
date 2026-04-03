@@ -15,6 +15,7 @@ DEFAULTS = {
     "writer_model_default": "MiniMax-Text-01",
     "image_provider_default": "google",
     "image_model_default": "gemini-3.1-flash-image-preview",
+    "summary_image_mode_default": "single_pass",
     "git_auto_push": "true",
 }
 
