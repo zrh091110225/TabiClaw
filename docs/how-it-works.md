@@ -23,6 +23,8 @@
 
 入口脚本是 [`scripts/period_summary.sh`](../scripts/period_summary.sh)。
 
+如果只想生成“以今天为结束日、最近 7 个自然日”的周总结，可以直接运行 [`scripts/weekly_summary.sh`](../scripts/weekly_summary.sh)。它会先自动计算 `start-date` 和 `end-date`，再底层调用 [`scripts/period_summary.sh`](../scripts/period_summary.sh)。
+
 它会按顺序完成这些事情：
 
 1. 从 [`data/journals/index.md`](../data/journals/index.md) 和单篇游记中抽取指定时间范围的事实
@@ -48,6 +50,7 @@
 - [`scripts/init.sh`](../scripts/init.sh)：检查配置和运行时文件是否齐全
 - [`scripts/daily_workflow.sh`](../scripts/daily_workflow.sh)：执行阿虾的一整天
 - [`scripts/period_summary.sh`](../scripts/period_summary.sh)：生成一个时间范围内的阶段总结
+- [`scripts/weekly_summary.sh`](../scripts/weekly_summary.sh)：生成最近 7 个自然日（含今天）的周总结
 - [`scripts/replan_route.sh`](../scripts/replan_route.sh)：从起点到终点重新规划路线
 - [`scripts/continue_route.sh`](../scripts/continue_route.sh)：从当前路线末尾继续追加后续目的地
 - [`scripts/auto_commit.sh`](../scripts/auto_commit.sh)：在工作流结束后自动提交 Git

@@ -64,6 +64,7 @@ TabiClaw/
 │   ├── generate_landmarks.py
 │   ├── init.sh
 │   ├── period_summary.sh
+│   ├── weekly_summary.sh
 │   ├── replan_route.sh
 │   └── lib/
 │       ├── config.sh
@@ -164,8 +165,21 @@ bash scripts/period_summary.sh --start-date 2026-03-31 --end-date 2026-04-06
 作用：
 
 - 基于历史游记生成阶段总结 Markdown
-- 生成一张风格化路线海报
+- 生成一张阶段旅程主视觉海报
 - 更新 `data/journals/index.md` 中的阶段总结入口
+- 运行时在控制台直接打印阶段总结文案 prompt、阶段海报 prompt 和模型调用参数
+
+### 7. 生成周总结
+
+```bash
+bash scripts/weekly_summary.sh
+```
+
+作用：
+
+- 自动以今天为结束日，向前覆盖最近 7 个自然日（含今天）
+- 底层转调 `scripts/period_summary.sh`
+- 不需要手动传递日期参数
 
 ## 配置规则
 
@@ -179,12 +193,15 @@ bash scripts/period_summary.sh --start-date 2026-03-31 --end-date 2026-04-06
 - `writer_model_default`
 - `image_provider_default`
 - `image_model_default`
+- `summary_image_mode_default`
 - `git_auto_push`
 
 其中：
 
 - `city_map.json` 已经移入项目内，默认指向 `./config/city_map.json`
 - `git_auto_push=false` 时，自动提交后只 `commit`，不 `push`
+- 阶段海报默认复用游记图片生成的 `IMAGE_PROVIDER` / `IMAGE_MODEL`
+- `summary_image_mode_default` 当前默认值是 `single_pass`
 
 ## 外部依赖
 
@@ -231,6 +248,9 @@ DASHSCOPE_API_KEY=your_key
 TINYPNG_API_KEY=your_key
 ```
 
+阶段总结脚本不会单独要求 `SUMMARY_IMAGE_PROVIDER` / `SUMMARY_IMAGE_MODEL`；
+默认直接沿用上面这组游记图片变量。
+
 ## 用户请求到操作的映射
 
 ### 用户：帮我初始化旅行的阿虾
@@ -258,7 +278,8 @@ TINYPNG_API_KEY=your_key
 
 做法：
 
-- 运行 `bash scripts/period_summary.sh --start-date YYYY-MM-DD --end-date YYYY-MM-DD`
+- 如果用户明确是“过去一周”或“最近 7 天”，优先运行 `bash scripts/weekly_summary.sh`
+- 如果用户给了明确的开始日期和结束日期，运行 `bash scripts/period_summary.sh --start-date YYYY-MM-DD --end-date YYYY-MM-DD`
 - 返回总结文件、路线海报和索引入口
 
 ### 用户：重规划从杭州到北京

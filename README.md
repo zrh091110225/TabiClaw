@@ -108,6 +108,12 @@ DASHSCOPE_API_KEY=your_key
 bash scripts/period_summary.sh --start-date 2026-03-31 --end-date 2026-04-06
 ```
 
+如果你只是想直接生成“以今天为结束日、最近 7 个自然日”的周总结，也可以运行：
+
+```bash
+bash scripts/weekly_summary.sh
+```
+
 这会生成：
 
 - [`data/summaries/`](./data/summaries/) 下的一篇阶段总结
@@ -151,6 +157,9 @@ bash scripts/daily_workflow.sh
 
 # 生成指定时间范围的阶段总结
 bash scripts/period_summary.sh --start-date 2026-03-31 --end-date 2026-04-06
+
+# 生成最近 7 个自然日（含今天）的周总结
+bash scripts/weekly_summary.sh
 
 # 指定日期执行
 bash scripts/daily_workflow.sh 2026-03-31
