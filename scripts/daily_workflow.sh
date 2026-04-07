@@ -311,6 +311,41 @@ if [[ ! -f "$PROMPT_TEMPLATE_FILE" ]]; then
 fi
 
 export PERSONA STYLE CURRENT_DAY TARGET_DATE WEATHER_DESC TEMP_C CURRENT_CITY NEXT_CITY PRICE ATTRACTION_1 ATTRACTION_2 ATTRACTION_3
+RECENT_ENDINGS=$(python3 - "$PROJECT_ROOT" "$TARGET_DATE" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+project_root = Path(sys.argv[1])
+target_date = sys.argv[2]
+journal_dir = project_root / "data" / "journals"
+pattern = re.compile(r"^\d{4}-\d{2}-\d{2}-.+\.md$")
+records = []
+
+for path in sorted(journal_dir.glob("*.md"), reverse=True):
+    if not pattern.match(path.name):
+        continue
+    if path.name.startswith(f"{target_date}-"):
+        continue
+    try:
+        lines = [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    except OSError:
+        continue
+    ending = ""
+    for i, line in enumerate(lines):
+        if re.fullmatch(r"交通费：\d+元", line):
+            if i > 0:
+                ending = lines[i - 1]
+            break
+    if ending:
+        records.append(f"- {path.name[:10]}：{ending}")
+    if len(records) >= 4:
+        break
+
+print("\n".join(records) if records else "暂无可参考的历史收尾句。")
+PY
+)
+export RECENT_ENDINGS
 CONTENT_PROMPT=$(python3 "$PROJECT_ROOT/scripts/lib/template_renderer.py" < "$PROMPT_TEMPLATE_FILE")
 
 echo "$CONTENT_PROMPT" > "$PROJECT_ROOT/data/output/content_prompt_${TARGET_DATE}.txt"
