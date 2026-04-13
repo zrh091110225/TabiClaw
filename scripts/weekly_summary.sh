@@ -5,7 +5,7 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 用法:
-  bash scripts/weekly_summary.sh
+  bash scripts/weekly_summary.sh [--env-file path]
 
 说明:
   自动生成最近 7 个自然日（含今天）的时间范围，
@@ -16,20 +16,30 @@ EOF
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PERIOD_SUMMARY_SCRIPT="$PROJECT_ROOT/scripts/period_summary.sh"
+ENV_FILE=""
 
-if [[ $# -gt 0 ]]; then
+while [[ $# -gt 0 ]]; do
   case "$1" in
+    --env-file)
+      ENV_FILE="${2:-}"
+      if [[ -z "$ENV_FILE" ]]; then
+        echo "--env-file 需要提供路径" >&2
+        usage
+        exit 1
+      fi
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
       ;;
     *)
-      echo "weekly_summary.sh 不接受参数" >&2
+      echo "未知参数: $1" >&2
       usage
       exit 1
       ;;
   esac
-fi
+done
 
 if [[ ! -f "$PERIOD_SUMMARY_SCRIPT" ]]; then
   echo "缺少底层脚本: $PERIOD_SUMMARY_SCRIPT" >&2
@@ -49,6 +59,14 @@ EOF
 
 echo "生成周总结时间范围: ${START_DATE} -> ${END_DATE}"
 
-bash "$PERIOD_SUMMARY_SCRIPT" \
-  --start-date "$START_DATE" \
+CMD=(
+  bash "$PERIOD_SUMMARY_SCRIPT"
+  --start-date "$START_DATE"
   --end-date "$END_DATE"
+)
+
+if [[ -n "$ENV_FILE" ]]; then
+  CMD+=(--env-file "$ENV_FILE")
+fi
+
+"${CMD[@]}"

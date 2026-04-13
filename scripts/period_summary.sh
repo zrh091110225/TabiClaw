@@ -11,6 +11,7 @@ EOF
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+AUTO_COMMIT_SCRIPT="$PROJECT_ROOT/scripts/auto_commit.sh"
 
 # shellcheck source=/dev/null
 source "$PROJECT_ROOT/scripts/lib/config.sh"
@@ -76,3 +77,11 @@ python3 "$PROJECT_ROOT/scripts/generate_period_summary.py" \
   --project-root "$PROJECT_ROOT" \
   --start-date "$START_DATE" \
   --end-date "$END_DATE"
+
+if [[ ! -f "$AUTO_COMMIT_SCRIPT" ]]; then
+  echo "缺少自动提交脚本: $AUTO_COMMIT_SCRIPT" >&2
+  exit 1
+fi
+
+echo "开始自动 Git 提交与推送..."
+bash "$AUTO_COMMIT_SCRIPT" "总结更新: ${START_DATE} -> ${END_DATE}" 
