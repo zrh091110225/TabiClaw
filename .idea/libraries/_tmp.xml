@@ -1,0 +1,10 @@
+<component name="libraryTable">
+  <library name=".tmp">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/.tmp/humanizer-zh_1.0.0.zip!/" />
+      <root url="jar://$PROJECT_DIR$/.tmp/agent-memory-system-guide_1.1.5.zip!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>
