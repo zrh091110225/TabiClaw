@@ -36,18 +36,14 @@
   <img src="./data/demo/成都.jpg" width="30%" />
   <img src="./data/demo/重庆.jpg" width="30%" />
   <img src="./data/demo/大理.jpg" width="30%" />
-  <img src="./data/demo/敦煌.jpg" width="30%" />
   <img src="./data/demo/广州.jpg" width="30%" />
   <img src="./data/demo/桂林.jpg" width="30%" />
   <img src="./data/demo/哈尔滨.jpg" width="30%" />
   <img src="./data/demo/湖南.jpg" width="30%" />
   <img src="./data/demo/昆明.jpg" width="30%" />
-  <img src="./data/demo/满洲里.jpg" width="30%" />
   <img src="./data/demo/南京.jpg" width="30%" />
-  <img src="./data/demo/三亚.jpg" width="30%" />
   <img src="./data/demo/厦门.jpg" width="30%" />
   <img src="./data/demo/上海.jpg" width="30%" />
-  <img src="./data/demo/深圳.jpg" width="30%" />
   <img src="./data/demo/苏州.jpg" width="30%" />
 </div>
 
